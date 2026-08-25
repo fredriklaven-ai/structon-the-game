@@ -524,7 +524,7 @@ body, html {
     top: 0;
     left: 0;
     width: 100vw;
-    height: 100vh;
+    height: 100dvh;
     background: rgba(5, 8, 17, 0.85);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -533,6 +533,8 @@ body, html {
     justify-content: center;
     z-index: 100;
     padding: 16px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .modal-content {
@@ -546,6 +548,9 @@ body, html {
     display: flex;
     flex-direction: column;
     gap: 16px;
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
     animation: modalPop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
@@ -876,4 +881,17 @@ input[type="range"]::-webkit-slider-thumb {
     .material-shelf { padding: 4px 8px; }
     .mat-card { min-width: 88px; padding: 3px 6px; }
     .tool-btn { width: 34px; height: 34px; font-size: 13px; }
+    .modal-backdrop {
+        align-items: flex-start;
+        padding: 8px;
+    }
+    .modal-content {
+        max-height: calc(100dvh - 16px);
+        padding: 12px;
+        gap: 8px;
+    }
+    .report-header { padding: 8px; }
+    .report-header h2 { font-size: 14px; }
+    .stars-container { font-size: 18px; }
+    .engineer-comment { padding: 8px; margin-bottom: 6px; }
 }

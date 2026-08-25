@@ -26,11 +26,13 @@ export class PhysicsEngine {
             brokenMembersCount: 0,
             maxTopSway: 0,
             buildingHeight: 0,
+            peakWorldY: 0,
             buildingWidth: 0,
             totalCost: 0
         };
 
         this.onMemberBroken = null; // Callback för ljud och händelser
+        this.terrain = null;
     }
 
     reset() {
@@ -45,6 +47,7 @@ export class PhysicsEngine {
             brokenMembersCount: 0,
             maxTopSway: 0,
             buildingHeight: 0,
+            peakWorldY: 0,
             buildingWidth: 0,
             totalCost: 0
         };
@@ -58,6 +61,8 @@ export class PhysicsEngine {
             n.vy = 0;
             n.fx = 0;
             n.fy = 0;
+            n.fixed = n.initialFixed;
+            n.isBedrockPinned = n.initialBedrockPinned;
         }
         for (const m of this.members) {
             m.isBroken = false;
@@ -89,10 +94,13 @@ export class PhysicsEngine {
             fy: 0,
             mass: 50, // Grundmassa i kg
             fixed: isFixed,
+            initialFixed: isFixed,
             soilType: soilType,
             connectedMembers: [],
             settlement: 0,
-            isGroundAnchor: isFixed || y <= 0
+            isBedrockPinned: false,
+            initialBedrockPinned: false,
+            isGroundAnchor: isFixed || this._isAtTerrainSurface(x, y)
         };
         this.nodes.push(node);
         return node;
@@ -159,9 +167,31 @@ export class PhysicsEngine {
         nodeA.connectedMembers.push(member);
         nodeB.connectedMembers.push(member);
 
+        if (material.isPile) {
+            this._tryPinPileToBedrock(nodeA);
+            this._tryPinPileToBedrock(nodeB);
+        }
+
         this.updateNodeMasses();
         this.calculateStats();
         return member;
+    }
+
+    _isAtTerrainSurface(x, y) {
+        if (!this.terrain) return y <= 0;
+        return y <= this.terrain.surfaceY(x) + 0.3;
+    }
+
+    _tryPinPileToBedrock(node) {
+        if (!this.terrain || !node) return;
+        if (this.terrain.isSolidRockForPin(node.x, node.y)) {
+            node.fixed = true;
+            node.initialFixed = true;
+            node.isBedrockPinned = true;
+            node.initialBedrockPinned = true;
+            node.soilType = 'bedrock';
+            node.isGroundAnchor = true;
+        }
     }
 
     removeMember(member) {
@@ -193,7 +223,7 @@ export class PhysicsEngine {
     }
 
     cleanOrphanNodes() {
-        this.nodes = this.nodes.filter(n => n.fixed || n.connectedMembers.length > 0);
+        this.nodes = this.nodes.filter(n => n.fixed || n.isGroundAnchor || n.isBedrockPinned || n.connectedMembers.length > 0);
     }
 
     updateNodeMasses() {
@@ -218,19 +248,9 @@ export class PhysicsEngine {
                 n.fx = 0;
                 n.fy = n.mass * this.gravity;
 
-                // Markreaktion & jordinteraktion
-                if (n.y <= 0 && !n.fixed) {
-                    // Markfjäder / bärighet
-                    const soil = n.soilType ? SOIL_TYPES[n.soilType] : SOIL_TYPES.stiff_soil;
-                    const penetration = -n.y;
-                    if (penetration > 0) {
-                        const kGround = 450000 * (soil ? soil.stiffness : 1.0);
-                        const fNormal = penetration * kGround;
-                        n.fy += fNormal;
-                        // Friktion i sidled
-                        n.fx -= n.vx * (fNormal * 0.35 + 200);
-                        n.vy *= 0.7; // Dämpning vid markkontakt
-                    }
+                // Markreaktion, klyftor, vatten, tunnlar och berg
+                if (!n.fixed) {
+                    this.applyTerrainForces(n);
                 }
             }
 
@@ -370,17 +390,108 @@ export class PhysicsEngine {
                 n.x += n.vx * effectiveDt;
                 n.y += n.vy * effectiveDt;
 
-                // Förhindra att fria noder faller genom berggrunden
-                if (n.y < -15) {
-                    n.y = -15;
+                // Djupaste tillåtna fall (klyfta / tunnel / spricka)
+                if (n.y < -45) {
+                    n.y = -45;
                     n.vy = 0;
                 }
             }
         }
 
+        this.evaluateTunnelRoofLoads();
+
         // Uppdatera partiklar och skräp
         this.updateDebris(dt);
         this.calculateStats();
+    }
+
+    applyTerrainForces(n) {
+        const terrain = this.terrain;
+        if (!terrain) {
+            if (n.y <= 0) {
+                const soil = n.soilType ? SOIL_TYPES[n.soilType] : SOIL_TYPES.stiff_soil;
+                const penetration = -n.y;
+                const kGround = 450000 * (soil ? soil.stiffness : 1.0);
+                const fNormal = penetration * kGround;
+                n.fy += fNormal;
+                n.fx -= n.vx * (fNormal * 0.35 + 200);
+                n.vy *= 0.7;
+            }
+            return;
+        }
+
+        const cls = terrain.classify(n.x, n.y);
+        const waterY = terrain.waterSurfaceY(n.x);
+
+        if (cls === 'water' || (waterY != null && n.y < waterY && n.y > terrain.surfaceY(n.x))) {
+            n.fy += n.mass * 7.4; // flytkraft mot tyngdkraften
+            n.vx *= 0.92;
+            n.vy *= 0.88;
+            n.fx -= n.vx * 180;
+        }
+
+        if (cls === 'tunnel') {
+            const tunnel = terrain.getTunnelAt(n.x, n.y);
+            if (tunnel) {
+                const floor = terrain.tunnelFloorY(tunnel, n.x);
+                if (floor != null && n.y < floor) {
+                    n.y = floor;
+                    n.vy = Math.max(0, -n.vy * 0.2);
+                }
+            }
+            return;
+        }
+
+        if (cls === 'crack') {
+            return;
+        }
+
+        const support = terrain.supportY(n.x);
+        if (n.y < support) {
+            const penetration = support - n.y;
+            const soil = terrain.soilAt(n.x, support - 0.05);
+            const kGround = 450000 * (soil ? soil.stiffness : 1.0);
+            const fNormal = penetration * kGround;
+            n.fy += fNormal;
+            n.fx -= n.vx * (fNormal * 0.35 + 200);
+            n.vy *= 0.7;
+            n.soilType = soil ? soil.id : n.soilType;
+        }
+    }
+
+    evaluateTunnelRoofLoads() {
+        const terrain = this.terrain;
+        if (!terrain || !terrain.tunnels.length) return;
+
+        const assessments = terrain.assessTunnelLoads(this.nodes);
+        for (const a of assessments) {
+            if (a.collapsed) continue;
+            if (a.utilization < 1.02) continue;
+            if (!terrain.collapseTunnel(a.tunnel)) continue;
+
+            for (const n of this.nodes) {
+                if (!terrain.isNodeOnTunnelCover(n, a.tunnel)) continue;
+                if (n.isBedrockPinned && terrain.isSolidRockForPin(n.x, n.y)) continue;
+                n.fixed = false;
+                n.isBedrockPinned = false;
+            }
+
+            const t = a.tunnel;
+            for (let i = 0; i < 22; i++) {
+                const ang = (i / 22) * Math.PI * 2;
+                this.particles.push({
+                    x: t.x + Math.cos(ang) * t.width * 0.25,
+                    y: t.y + Math.sin(ang) * t.height * 0.25,
+                    vx: (Math.random() - 0.5) * 6,
+                    vy: Math.random() * 4,
+                    size: Math.random() * 0.35 + 0.12,
+                    color: '#64748B',
+                    alpha: 1.0,
+                    life: Math.random() * 1.8 + 0.7,
+                    type: 'dust'
+                });
+            }
+        }
     }
 
     breakMember(member) {
@@ -440,9 +551,10 @@ export class PhysicsEngine {
             d.angle += d.vAngle * dt;
             d.life -= dt;
 
-            // Markkollision
-            if (d.y <= 0) {
-                d.y = 0;
+            // Markkollision mot kuperad yta
+            const groundY = this.terrain ? this.terrain.supportY(d.x) : 0;
+            if (d.y <= groundY) {
+                d.y = groundY;
                 d.vy = -d.vy * 0.25;
                 d.vx *= 0.6;
                 d.vAngle *= 0.5;
@@ -473,7 +585,8 @@ export class PhysicsEngine {
         let criticalMem = null;
         let totalCost = 0;
         let totalMass = 0;
-        let maxY = 0;
+        let maxY = -Infinity;
+        let maxHeightAboveGround = 0;
         let minX = Infinity;
         let maxX = -Infinity;
         let maxSway = 0;
@@ -494,6 +607,10 @@ export class PhysicsEngine {
             if (n.x < minX) minX = n.x;
             if (n.x > maxX) maxX = n.x;
 
+            const ground = this.terrain ? this.terrain.surfaceY(n.x) : 0;
+            const heightAboveGround = n.y - ground;
+            if (heightAboveGround > maxHeightAboveGround) maxHeightAboveGround = heightAboveGround;
+
             const sway = Math.abs(n.x - n.initialX);
             if (sway > maxSway) maxSway = sway;
         }
@@ -502,7 +619,8 @@ export class PhysicsEngine {
         this.stats.criticalMember = criticalMem;
         this.stats.totalCost = totalCost;
         this.stats.totalMass = Math.round(totalMass);
-        this.stats.buildingHeight = Math.max(0, parseFloat(maxY.toFixed(1)));
+        this.stats.buildingHeight = Math.max(0, parseFloat(maxHeightAboveGround.toFixed(1)));
+        this.stats.peakWorldY = Number.isFinite(maxY) ? maxY : 0;
         this.stats.buildingWidth = minX < maxX ? parseFloat((maxX - minX).toFixed(1)) : 0;
         this.stats.maxTopSway = parseFloat(maxSway.toFixed(2));
     }

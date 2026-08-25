@@ -34,6 +34,7 @@ I **Structon The Game** agerar du chefsingenjör och bygger allt från små vill
   5. *Grand Skyport Terminal* (36m spännvidd på skredkänslig mark)
   6. *Burj Structon* (105m megaskyskrapa)
   7. *Sandlådeläge* (Fri byggnad med anpassningsbara katastrofsliders)
+- **Kuperad geologi**: Markyta och urberg varierar som riktig natur och fortsätter utan avbrott åt sidorna. Vissa nivåer har djupa klyftor, vatten, bergssprickor och tunnlar. Bergvolymen ovanför en tunnel måste bära husvikten – för tunn täckning rasar taket.
 - **Mobil Touch-First UI & Ljud**:
   - Nyp-för-zoom, panorering och magnetisk nod-snäppning.
   - 100% syntetiserat proceduriellt Web Audio-ljud.

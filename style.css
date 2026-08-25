@@ -25,12 +25,17 @@
     user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;
-    touch-action: none;
+}
+
+button, input, a, .top-hud, .toolbox, .bottom-dock, .modal-backdrop,
+.sandbox-drawer, .inspection-card {
+    touch-action: manipulation;
 }
 
 body, html {
     width: 100%;
     height: 100%;
+    height: 100dvh;
     overflow: hidden;
     background-color: var(--bg-dark);
     font-family: var(--font-sans);
@@ -40,7 +45,8 @@ body, html {
 #app {
     position: relative;
     width: 100vw;
-    height: 100vh;
+    height: 100%;
+    height: 100dvh;
     display: flex;
     flex-direction: column;
 }
@@ -54,6 +60,7 @@ body, html {
     height: 100%;
     display: block;
     z-index: 1;
+    touch-action: none;
 }
 
 /* =========================================================
@@ -61,19 +68,22 @@ body, html {
    ========================================================= */
 .top-hud {
     position: absolute;
-    top: 10px;
+    top: max(10px, env(safe-area-inset-top));
     left: 10px;
     right: 10px;
-    height: 54px;
+    min-height: 54px;
+    height: auto;
     background: var(--bg-panel);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     border: 1px solid var(--border-color);
     border-radius: 12px;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    padding: 0 14px;
+    gap: 8px;
+    padding: 8px 14px;
     z-index: 10;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
@@ -127,7 +137,34 @@ body, html {
 .hud-actions {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 8px;
+    margin-left: auto;
+}
+
+.zoom-cluster {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.zoom-cluster .icon-btn {
+    width: 34px;
+    height: 34px;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.hud-invig {
+    display: flex;
+    align-items: center;
+}
+
+.btn-invig {
+    height: 38px;
+    padding: 0 16px;
+    font-size: 12px;
+    white-space: nowrap;
 }
 
 .icon-btn {
@@ -163,6 +200,9 @@ body, html {
     position: absolute;
     top: 74px;
     left: 10px;
+    max-height: calc(100dvh - 160px - env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
     background: var(--bg-panel);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
@@ -227,7 +267,7 @@ body, html {
    ========================================================= */
 .bottom-dock {
     position: absolute;
-    bottom: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
     left: 10px;
     right: 10px;
     display: flex;
@@ -667,6 +707,8 @@ body, html {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    max-height: calc(100dvh - 160px);
+    overflow-y: auto;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
@@ -751,20 +793,34 @@ input[type="range"]::-webkit-slider-thumb {
 /* =========================================================
    RESPONSIVITET (MOBIL & TOUCH)
    ========================================================= */
+@media (max-width: 900px) {
+    .top-hud {
+        padding: 8px 10px;
+    }
+    .btn-invig {
+        width: 100%;
+        justify-content: center;
+    }
+    .hud-invig {
+        flex: 1 1 160px;
+    }
+}
+
 @media (max-width: 640px) {
     .top-hud {
-        height: 48px;
-        padding: 0 8px;
+        min-height: 48px;
+        padding: 6px 8px;
     }
     .game-title-group h1 { font-size: 12px; }
     .level-badge { display: none; }
     .stat-val { font-size: 11px; }
-    .toolbox { top: 60px; left: 8px; }
+    .toolbox { top: 60px; left: 8px; max-height: calc(100dvh - 140px); }
     .tool-btn { width: 38px; height: 38px; font-size: 15px; }
-    .bottom-dock { bottom: 8px; left: 6px; right: 6px; }
+    .bottom-dock { bottom: max(8px, env(safe-area-inset-bottom)); left: 6px; right: 6px; }
     .mat-card { min-width: 95px; padding: 4px 6px; }
     .mat-name { font-size: 10px; }
     .btn { height: 42px; font-size: 12px; padding: 0 16px; }
+    .btn-invig { height: 36px; font-size: 11px; }
     .inspection-card { width: 210px; font-size: 10px; }
     .sandbox-drawer { width: 200px; top: 60px; }
 }

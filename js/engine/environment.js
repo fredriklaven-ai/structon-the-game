@@ -35,6 +35,7 @@ export class EnvironmentEngine {
         // Callback för blixt och jordbävning (ljudtriggar)
         this.onLightning = null;
         this.onEarthquakeStep = null;
+        this.terrain = null;
     }
 
     reset() {
@@ -142,7 +143,7 @@ export class EnvironmentEngine {
         for (const drop of this.rainDrops) {
             drop.x += this.windSpeed * 0.6 * dt;
             drop.y -= drop.speed * dt;
-            if (drop.y < 0) {
+            if (drop.y < (this.terrain ? this.terrain.surfaceY(drop.x) : 0)) {
                 drop.y = 80 + Math.random() * 20;
                 drop.x = (Math.random() - 0.2) * 80;
             }
@@ -214,8 +215,10 @@ export class EnvironmentEngine {
         // 3. Jordbävningsacceleration & markförskjutning
         if (this.earthquakeMagnitude > 0) {
             for (const n of nodes) {
-                if (n.fixed || n.y <= 0) {
-                    // Förskjut förankringspunkter direkt
+                const onGround = n.fixed || n.isGroundAnchor || n.isBedrockPinned
+                    || (this.terrain && n.y <= this.terrain.surfaceY(n.x) + 0.35)
+                    || (!this.terrain && n.y <= 0);
+                if (onGround) {
                     n.x = n.initialX + this.groundOffsetX;
                     n.y = n.initialY + this.groundOffsetY;
                 }

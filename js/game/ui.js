@@ -1126,6 +1126,7 @@ export class UIManager {
         const lvl = this.game.currentLevel;
         const targetHeight = lvl ? lvl.targetHeight : 0;
         const currentHeight = this.game.physics.stats.buildingHeight;
+        const peakWorldY = this.game.physics.stats.peakWorldY ?? currentHeight;
 
         const rulerX = -32 * this.zoom;
         const maxH = Math.max(targetHeight + 10, currentHeight + 10, 20);
@@ -1163,7 +1164,7 @@ export class UIManager {
 
         // Aktuell topphöjdslinje
         if (currentHeight > 0.5) {
-            const curY = -currentHeight * this.zoom;
+            const curY = -peakWorldY * this.zoom;
             ctx.strokeStyle = '#38BDF8';
             ctx.lineWidth = 1;
             ctx.setLineDash([4, 4]);

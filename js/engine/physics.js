@@ -26,6 +26,7 @@ export class PhysicsEngine {
             brokenMembersCount: 0,
             maxTopSway: 0,
             buildingHeight: 0,
+            peakWorldY: 0,
             buildingWidth: 0,
             totalCost: 0
         };
@@ -46,6 +47,7 @@ export class PhysicsEngine {
             brokenMembersCount: 0,
             maxTopSway: 0,
             buildingHeight: 0,
+            peakWorldY: 0,
             buildingWidth: 0,
             totalCost: 0
         };
@@ -583,7 +585,8 @@ export class PhysicsEngine {
         let criticalMem = null;
         let totalCost = 0;
         let totalMass = 0;
-        let maxY = 0;
+        let maxY = -Infinity;
+        let maxHeightAboveGround = 0;
         let minX = Infinity;
         let maxX = -Infinity;
         let maxSway = 0;
@@ -604,6 +607,10 @@ export class PhysicsEngine {
             if (n.x < minX) minX = n.x;
             if (n.x > maxX) maxX = n.x;
 
+            const ground = this.terrain ? this.terrain.surfaceY(n.x) : 0;
+            const heightAboveGround = n.y - ground;
+            if (heightAboveGround > maxHeightAboveGround) maxHeightAboveGround = heightAboveGround;
+
             const sway = Math.abs(n.x - n.initialX);
             if (sway > maxSway) maxSway = sway;
         }
@@ -612,7 +619,8 @@ export class PhysicsEngine {
         this.stats.criticalMember = criticalMem;
         this.stats.totalCost = totalCost;
         this.stats.totalMass = Math.round(totalMass);
-        this.stats.buildingHeight = Math.max(0, parseFloat(maxY.toFixed(1)));
+        this.stats.buildingHeight = Math.max(0, parseFloat(maxHeightAboveGround.toFixed(1)));
+        this.stats.peakWorldY = Number.isFinite(maxY) ? maxY : 0;
         this.stats.buildingWidth = minX < maxX ? parseFloat((maxX - minX).toFixed(1)) : 0;
         this.stats.maxTopSway = parseFloat(maxSway.toFixed(2));
     }

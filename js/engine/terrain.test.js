@@ -139,6 +139,18 @@ test('ankarnoder följer den kuperade markytan', () => {
     }
 });
 
+test('bygghöjd mäts ovanför markytan, inte i världs-Y', () => {
+    const terrain = terrainFor(LEVELS[0]);
+    const physics = new PhysicsEngine();
+    physics.terrain = terrain;
+    const a = physics.addNode(0, terrain.surfaceY(0), true, 'stiff_soil');
+    a.isGroundAnchor = true;
+    const roof = physics.addNode(0, terrain.surfaceY(0) + 6.5, false);
+    physics.addMember(a, roof, 'wood');
+    physics.calculateStats();
+    assert.ok(Math.abs(physics.stats.buildingHeight - 6.5) < 0.15, `fick ${physics.stats.buildingHeight}`);
+});
+
 test('alla kampanjnivåer har sammanhängande terrängprofiler', () => {
     for (const level of [...LEVELS, SANDBOX_LEVEL]) {
         const t = terrainFor(level);

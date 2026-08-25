@@ -1,6 +1,7 @@
 /**
  * STRUCTON THE GAME - UI & Canvas Renderingsmotor
- * Hanterar pekskärmskontroller, nyp-zoom, magnetisk snäppning, rendering av balkar/mark/rum och modaler.
+ * Hanterar pekskärmskontroller (tvåfingrar-scroll/pan, nyp-zoom), magnetisk snäppning,
+ * rendering av balkar/mark/rum och modaler.
  */
 
 import { MATERIALS, SOIL_TYPES } from '../engine/materials.js';

@@ -112,6 +112,57 @@ export class AudioManager {
         osc.stop(this.ctx.currentTime + 0.05);
     }
 
+    // Placera nod
+    playPlaceNode() {
+        if (!this.ctx || this.isMuted) return;
+        this.resume();
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(520, now);
+        osc.frequency.exponentialRampToValueAtTime(260, now + 0.07);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.07);
+    }
+
+    // Fasadpanel monteras på stommen
+    playFacadeMount(style = 'glass') {
+        if (!this.ctx || this.isMuted) return;
+        this.resume();
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = style === 'wood' ? 'triangle' : 'sine';
+        const startFreq = style === 'brick' ? 180 : style === 'wood' ? 320 : 640;
+        osc.frequency.setValueAtTime(startFreq, now);
+        osc.frequency.exponentialRampToValueAtTime(startFreq * 0.55, now + 0.12);
+        gain.gain.setValueAtTime(0.22, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.14);
+
+        if (style === 'curtain' || style === 'glass') {
+            const osc2 = this.ctx.createOscillator();
+            const gain2 = this.ctx.createGain();
+            osc2.type = 'sine';
+            osc2.frequency.setValueAtTime(1200, now + 0.02);
+            osc2.frequency.exponentialRampToValueAtTime(900, now + 0.1);
+            gain2.gain.setValueAtTime(0.08, now + 0.02);
+            gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+            osc2.connect(gain2);
+            gain2.connect(this.masterGain);
+            osc2.start(now + 0.02);
+            osc2.stop(now + 0.1);
+        }
+    }
+
     // Placera balk / byggnadselement
     playPlaceMember(materialKey) {
         if (!this.ctx || this.isMuted) return;

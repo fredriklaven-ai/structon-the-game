@@ -628,11 +628,7 @@ export class PhysicsEngine {
     // Upptäcker slutna 4-sidiga våningsplan (rum) för rendering av fönster, belysning och inredning
     detectRooms() {
         const rooms = [];
-        // Enkel våningsrumsdetektion baserad på rektangulära noder
-        // Sortera noder i våningsplan
         const activeMembers = this.members.filter(m => !m.isBroken && !m.material.isStrut);
-        
-        // Hitta horisontella och vertikala balkar
         const horiz = activeMembers.filter(m => Math.abs(m.nodeA.y - m.nodeB.y) < 0.4);
         const vert = activeMembers.filter(m => Math.abs(m.nodeA.x - m.nodeB.x) < 0.4);
 
@@ -640,29 +636,66 @@ export class PhysicsEngine {
             for (const top of horiz) {
                 if (bottom === top) continue;
                 const dy = top.nodeA.y - bottom.nodeA.y;
-                if (dy > 1.8 && dy < 5.0) { // Rimlig våningshöjd 2-5 meter
-                    // Kolla om det finns vänster och höger pelare
-                    const leftCol = vert.find(v => 
+                if (dy > 1.8 && dy < 5.0) {
+                    const leftCol = vert.find(v =>
                         (Math.hypot(v.nodeA.x - bottom.nodeA.x, v.nodeA.y - bottom.nodeA.y) < 0.5 && Math.hypot(v.nodeB.x - top.nodeA.x, v.nodeB.y - top.nodeA.y) < 0.5) ||
                         (Math.hypot(v.nodeB.x - bottom.nodeA.x, v.nodeB.y - bottom.nodeA.y) < 0.5 && Math.hypot(v.nodeA.x - top.nodeA.x, v.nodeA.y - top.nodeA.y) < 0.5)
                     );
-                    const rightCol = vert.find(v => 
+                    const rightCol = vert.find(v =>
                         (Math.hypot(v.nodeA.x - bottom.nodeB.x, v.nodeA.y - bottom.nodeB.y) < 0.5 && Math.hypot(v.nodeB.x - top.nodeB.x, v.nodeB.y - top.nodeB.y) < 0.5) ||
                         (Math.hypot(v.nodeB.x - bottom.nodeB.x, v.nodeB.y - bottom.nodeB.y) < 0.5 && Math.hypot(v.nodeA.x - top.nodeB.x, v.nodeA.y - top.nodeB.y) < 0.5)
                     );
 
                     if (leftCol && rightCol) {
+                        const leftX = Math.min(bottom.nodeA.x, bottom.nodeB.x, top.nodeA.x, top.nodeB.x);
+                        const rightX = Math.max(bottom.nodeA.x, bottom.nodeB.x, top.nodeA.x, top.nodeB.x);
+                        const bottomY = Math.min(bottom.nodeA.y, bottom.nodeB.y);
+                        const topY = Math.max(top.nodeA.y, top.nodeB.y);
                         rooms.push({
-                            bottomA: bottom.nodeA,
-                            bottomB: bottom.nodeB,
-                            topA: top.nodeA,
-                            topB: top.nodeB,
-                            floorLevel: Math.round(bottom.nodeA.y / 3.2)
+                            bottomA: bottom.nodeA.x <= bottom.nodeB.x ? bottom.nodeA : bottom.nodeB,
+                            bottomB: bottom.nodeA.x <= bottom.nodeB.x ? bottom.nodeB : bottom.nodeA,
+                            topA: top.nodeA.x <= top.nodeB.x ? top.nodeA : top.nodeB,
+                            topB: top.nodeA.x <= top.nodeB.x ? top.nodeB : top.nodeA,
+                            leftX,
+                            rightX,
+                            bottomY,
+                            topY,
+                            floorLevel: Math.round(bottomY / 3.2),
+                            width: rightX - leftX,
+                            height: topY - bottomY
                         });
                     }
                 }
             }
         }
-        return rooms;
+
+        // Deduplicera nästan identiska rum
+        const unique = [];
+        for (const room of rooms) {
+            const dup = unique.find(u =>
+                Math.abs(u.leftX - room.leftX) < 0.3 &&
+                Math.abs(u.rightX - room.rightX) < 0.3 &&
+                Math.abs(u.bottomY - room.bottomY) < 0.3 &&
+                Math.abs(u.topY - room.topY) < 0.3
+            );
+            if (!dup) unique.push(room);
+        }
+        return unique;
+    }
+
+    /**
+     * Fasadbås sorterade underifrån och från vänster – montageordning vid invigning.
+     */
+    getFacadeBays(styleHint = null) {
+        const rooms = this.detectRooms();
+        rooms.sort((a, b) => {
+            if (a.floorLevel !== b.floorLevel) return a.floorLevel - b.floorLevel;
+            return a.leftX - b.leftX;
+        });
+        return rooms.map((room, index) => ({
+            ...room,
+            mountIndex: index,
+            style: styleHint
+        }));
     }
 }

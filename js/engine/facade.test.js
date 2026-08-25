@@ -92,13 +92,12 @@ test('kuvertfasad används när stommen saknar perfekta fack', () => {
     const b0 = physics.addNode(4, 0.3, true);
     const a1 = physics.addNode(0.2, 5.8, false);
     const b1 = physics.addNode(3.8, 6.1, false);
+    // Ofullständig stomme: grund + pelare, inget övre bjälklag → inga slutna fack
     physics.addMember(a0, b0, 'wood');
     physics.addMember(a0, a1, 'wood');
     physics.addMember(b0, b1, 'wood');
-    physics.addMember(a1, b1, 'wood');
-    // Höjd > 5 m utan mellanjbjälklag → inga klassiska rum, men kuvert
     assert.equal(physics.detectRooms().length, 0);
     const bays = physics.getFacadeBays('wood');
     assert.ok(bays.length >= 1, `förväntade kuvertfasad, fick ${bays.length}`);
-    assert.ok(bays.some(b => b.isEnvelope));
+    assert.ok(bays.every(b => b.isEnvelope));
 });

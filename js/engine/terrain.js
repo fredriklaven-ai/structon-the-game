@@ -20,8 +20,8 @@ export class TerrainEngine {
         this.baseSurfaceY = ground.surfaceY ?? 0;
         this.baseBedrockY = ground.bedrockY ?? -4;
         this.slopeAngle = ground.slopeAngle ?? 0;
-        this.surfaceAmp = ground.surfaceAmp ?? 1.15;
-        this.bedrockAmp = ground.bedrockAmp ?? 1.7;
+        this.surfaceAmp = ground.surfaceAmp ?? 2.2;
+        this.bedrockAmp = ground.bedrockAmp ?? 2.8;
         this.ravines = ground.ravines || [];
         this.cracks = ground.cracks || [];
         this.tunnels = (ground.tunnels || []).map((t, i) => ({ ...t, id: t.id || `tunnel_${i}` }));
@@ -79,11 +79,11 @@ export class TerrainEngine {
     }
 
     _rawSurface(x) {
-        const n = (this.fbm(x * 0.048, 5) - 0.5) * 2;
-        const hills = Math.sin(x * 0.062 + this.seed * 0.4) * 0.55
-            + Math.sin(x * 0.028 + 1.7) * 0.85
-            + Math.sin(x * 0.14 + 0.6) * 0.22;
-        let y = this.baseSurfaceY + this._slope(x) + n * this.surfaceAmp + hills * (this.surfaceAmp * 0.35);
+        const n = (this.fbm(x * 0.042, 5) - 0.5) * 2;
+        const hills = Math.sin(x * 0.055 + this.seed * 0.4) * 1.05
+            + Math.sin(x * 0.023 + 1.7) * 1.45
+            + Math.sin(x * 0.11 + 0.6) * 0.45;
+        let y = this.baseSurfaceY + this._slope(x) + n * this.surfaceAmp + hills * (this.surfaceAmp * 0.55);
 
         for (const r of this.ravines) {
             y -= this._depression(x, r.x, r.width, r.depth, r.steepness ?? 1.55);
@@ -103,10 +103,10 @@ export class TerrainEngine {
     }
 
     _rawBedrock(x) {
-        const n = (this.fbm(x * 0.031 + 40, 5) - 0.5) * 2;
-        const jagged = Math.sin(x * 0.17 + this.seed * 2.1) * 0.42
-            + Math.sin(x * 0.39 + 0.4) * 0.18
-            + Math.sin(x * 0.73 + 2.2) * 0.08;
+        const n = (this.fbm(x * 0.027 + 40, 5) - 0.5) * 2;
+        const jagged = Math.sin(x * 0.14 + this.seed * 2.1) * 0.62
+            + Math.sin(x * 0.33 + 0.4) * 0.32
+            + Math.sin(x * 0.61 + 2.2) * 0.16;
         let y = this.baseBedrockY + this._slope(x) * 0.55 + n * this.bedrockAmp + jagged * this.bedrockAmp;
 
         for (const r of this.ravines) {

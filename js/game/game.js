@@ -110,9 +110,10 @@ export class StructonGame {
         }
 
         // Återställ kameravy
+        const hasTunnels = (this.currentLevel.ground?.tunnels || []).length > 0;
         this.ui.panX = this.ui.displayWidth / 2;
-        this.ui.panY = this.ui.displayHeight * (this.currentLevel.targetHeight > 40 ? 0.85 : 0.72);
-        this.ui.zoom = this.currentLevel.targetHeight > 50 ? 12 : 24;
+        this.ui.panY = this.ui.displayHeight * (hasTunnels ? 0.58 : (this.currentLevel.targetHeight > 40 ? 0.82 : 0.66));
+        this.ui.zoom = this.currentLevel.targetHeight > 50 ? 11 : (hasTunnels ? 18 : 22);
 
         // Visa/dölj sandlådekontroller
         const sandboxDrawer = document.getElementById('sandbox-drawer');

@@ -610,7 +610,17 @@ export class UIManager {
         }
         ctx.fill('evenodd');
 
-        // Berglager / skikt som följer bergytan
+        // Bergöveryta (kuperad kontur mot jorden)
+        ctx.strokeStyle = '#64748B';
+        ctx.lineWidth = Math.max(2, z * 0.08);
+        ctx.beginPath();
+        for (let i = 0; i < profile.length; i++) {
+            const sx = profile[i].x * z;
+            const sy = -profile[i].bedrockY * z;
+            if (i === 0) ctx.moveTo(sx, sy);
+            else ctx.lineTo(sx, sy);
+        }
+        ctx.stroke();
         ctx.strokeStyle = 'rgba(71, 85, 105, 0.55)';
         ctx.lineWidth = 1.2;
         for (let k = 1; k <= 4; k++) {
@@ -683,7 +693,7 @@ export class UIManager {
                 const len = Math.hypot(dx, dy) || 1;
                 const nx = -dy / len;
                 const ny = dx / len;
-                const blade = 0.35 + (i % 5) * 0.04;
+                const blade = 0.55 + (i % 5) * 0.08;
                 ctx.moveTo(p.x * z, -p.surfaceY * z);
                 ctx.lineTo((p.x + nx * blade) * z, -(p.surfaceY + ny * blade) * z);
             }
@@ -722,15 +732,15 @@ export class UIManager {
     }
 
     renderDistantHills(ctx, profile, z) {
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
+        ctx.fillStyle = '#0B1220';
         ctx.beginPath();
-        ctx.moveTo(profile[0].x * z, -18 * z);
+        ctx.moveTo(profile[0].x * z, -6 * z);
         for (const p of profile) {
-            const y = p.surfaceY * 0.42 + 9 + Math.sin(p.x * 0.04) * 1.8;
+            const y = 7.5 + p.surfaceY * 0.55 + Math.sin(p.x * 0.035 + 0.8) * 2.4 + Math.sin(p.x * 0.09) * 1.1;
             ctx.lineTo(p.x * z, -y * z);
         }
-        ctx.lineTo(profile[profile.length - 1].x * z, 40 * z);
-        ctx.lineTo(profile[0].x * z, 40 * z);
+        ctx.lineTo(profile[profile.length - 1].x * z, 20 * z);
+        ctx.lineTo(profile[0].x * z, 20 * z);
         ctx.closePath();
         ctx.fill();
     }

@@ -24,12 +24,12 @@ export const LEVELS = [
             rightX: 12,
             surfaceY: 0,
             bedrockY: -3.2,
-            surfaceAmp: 0.85,
-            bedrockAmp: 1.15,
+            surfaceAmp: 1.85,
+            bedrockAmp: 2.4,
             soilType: 'stiff_soil',
             slopeAngle: 1.2,
             ravines: [
-                { x: -32, width: 11, depth: 4.2, steepness: 1.5, cutsRock: true, water: true, waterLevel: -1.4 }
+                { x: -22, width: 12, depth: 5.4, steepness: 1.45, cutsRock: true, water: true, waterLevel: -1.6 }
             ],
             anchorNodes: [
                 { x: -7, y: 0, fixed: true, soil: 'stiff_soil' },
@@ -71,8 +71,8 @@ export const LEVELS = [
             rightX: 16,
             surfaceY: 0,
             bedrockY: -4.1,
-            surfaceAmp: 0.7,
-            bedrockAmp: 1.4,
+            surfaceAmp: 1.55,
+            bedrockAmp: 2.5,
             soilType: 'stiff_soil',
             slopeAngle: 0.4,
             cracks: [
@@ -121,15 +121,15 @@ export const LEVELS = [
             rightX: 18,
             surfaceY: 0,
             bedrockY: -5.2,
-            surfaceAmp: 1.05,
-            bedrockAmp: 1.9,
+            surfaceAmp: 2.1,
+            bedrockAmp: 3.0,
             soilType: 'stiff_soil',
             slopeAngle: -0.8,
             ravines: [
-                { x: -20, width: 9, depth: 8.5, steepness: 1.8, cutsRock: true, water: false }
+                { x: -18, width: 8, depth: 7.2, steepness: 1.75, cutsRock: true, water: false }
             ],
             cracks: [
-                { x: -20, width: 0.8, depth: 11, openAtSurface: true }
+                { x: -18, width: 0.8, depth: 11, openAtSurface: true }
             ],
             anchorNodes: [
                 { x: -12, y: 0, fixed: true, soil: 'stiff_soil' },
@@ -173,8 +173,8 @@ export const LEVELS = [
             rightX: 22,
             surfaceY: 0,
             bedrockY: -6.4,
-            surfaceAmp: 1.1,
-            bedrockAmp: 2.0,
+            surfaceAmp: 2.0,
+            bedrockAmp: 3.1,
             soilType: 'stiff_soil',
             slopeAngle: 0.6,
             tunnels: [
@@ -184,7 +184,7 @@ export const LEVELS = [
                 { x: 11, width: 1.3, depth: 9, openAtSurface: true }
             ],
             ravines: [
-                { x: 28, width: 16, depth: 9, steepness: 1.45, cutsRock: true, water: true, waterLevel: -2.2 }
+                { x: 24, width: 14, depth: 8.5, steepness: 1.4, cutsRock: true, water: true, waterLevel: -2.0 }
             ],
             anchorNodes: [
                 { x: -15, y: 0, fixed: true, soil: 'stiff_soil' },
@@ -229,8 +229,8 @@ export const LEVELS = [
             rightX: 28,
             surfaceY: 0,
             bedrockY: -9.2,
-            surfaceAmp: 0.95,
-            bedrockAmp: 1.8,
+            surfaceAmp: 1.7,
+            bedrockAmp: 2.6,
             soilType: 'soft_clay',
             hasClayLayer: true,
             slopeAngle: -4,
@@ -238,7 +238,7 @@ export const LEVELS = [
                 { x: 6, width: 8, height: 4.2, cover: 2.6, name: 'Strandtunnel' }
             ],
             ravines: [
-                { x: 26, width: 18, depth: 7.5, steepness: 1.3, cutsRock: true, water: true, waterLevel: -3.4 }
+                { x: 22, width: 16, depth: 7.2, steepness: 1.3, cutsRock: true, water: true, waterLevel: -3.2 }
             ],
             waterBodies: [
                 { x: 34, width: 22, surfaceY: -3.4 }
@@ -291,8 +291,8 @@ export const LEVELS = [
             rightX: 32,
             surfaceY: 0,
             bedrockY: -10.5,
-            surfaceAmp: 1.35,
-            bedrockAmp: 2.4,
+            surfaceAmp: 2.4,
+            bedrockAmp: 3.4,
             soilType: 'stiff_soil',
             slopeAngle: 0.3,
             tunnels: [
@@ -303,7 +303,7 @@ export const LEVELS = [
                 { x: 14, width: 1.4, depth: 10, openAtSurface: true }
             ],
             ravines: [
-                { x: -38, width: 20, depth: 14, steepness: 1.65, cutsRock: true, water: true, waterLevel: -5.5 }
+                { x: -30, width: 16, depth: 12, steepness: 1.6, cutsRock: true, water: true, waterLevel: -4.8 }
             ],
             anchorNodes: [
                 { x: -22, y: 0, fixed: true, soil: 'stiff_soil' },
@@ -348,8 +348,8 @@ export const SANDBOX_LEVEL = {
         rightX: 40,
         surfaceY: 0,
         bedrockY: -8.5,
-        surfaceAmp: 1.4,
-        bedrockAmp: 2.2,
+        surfaceAmp: 2.3,
+        bedrockAmp: 3.2,
         soilType: 'stiff_soil',
         slopeAngle: 0.5,
         tunnels: [
@@ -359,7 +359,7 @@ export const SANDBOX_LEVEL = {
             { x: -16, width: 1.2, depth: 9, openAtSurface: true }
         ],
         ravines: [
-            { x: -30, width: 16, depth: 10, steepness: 1.5, cutsRock: true, water: true, waterLevel: -3.0 }
+            { x: -24, width: 14, depth: 9, steepness: 1.45, cutsRock: true, water: true, waterLevel: -2.6 }
         ],
         anchorNodes: [
             { x: -28, y: 0, fixed: true, soil: 'stiff_soil' },

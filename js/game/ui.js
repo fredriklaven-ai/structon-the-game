@@ -1091,10 +1091,15 @@ export class UIManager {
         ctx.lineWidth = Math.max(2, z * 0.08);
         ctx.strokeRect(x1 + 1, y2 + 1, w - 2, h - 2);
 
-        // Montageglans under pågående montering
+        // Montageglans under pågående montering – tydlig ledkant som rör sig uppåt
         if (progress < 0.999) {
-            ctx.fillStyle = `rgba(255, 255, 255, ${0.12 * (1 - progress)})`;
-            ctx.fillRect(x1, clipTop, w, Math.max(2, z * 0.15));
+            const edgeH = Math.max(4, z * 0.22);
+            const gloss = ctx.createLinearGradient(x1, clipTop, x1, clipTop + edgeH * 3);
+            gloss.addColorStop(0, 'rgba(255, 255, 255, 0.55)');
+            gloss.addColorStop(0.35, 'rgba(253, 224, 71, 0.35)');
+            gloss.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = gloss;
+            ctx.fillRect(x1, clipTop, w, edgeH * 3);
         }
 
         ctx.restore();

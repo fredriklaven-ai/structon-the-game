@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Structon The Game - Konstruktion & Bärverksfysik</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Renderingscanvas för bärverk & fysik -->
+        <canvas id="game-canvas"></canvas>
+
+        <!-- TOP HUD -->
+        <header class="top-hud">
+            <div class="hud-left">
+                <button class="icon-btn" id="btn-menu" title="Uppdragsmeny">🗺️</button>
+                <div class="game-title-group">
+                    <h1>Structon</h1>
+                    <span class="level-badge" id="hud-level-name">Nivå 1: Villa Solbacken</span>
+                </div>
+            </div>
+
+            <div class="hud-stats">
+                <div class="stat-box">
+                    <span class="stat-label">Bygghöjd</span>
+                    <span class="stat-val" id="hud-height">0.0m / 6.5m</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Kvarvarande Budget</span>
+                    <span class="stat-val" id="hud-budget">320 000 kr</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Max Spänning</span>
+                    <span class="stat-val" id="hud-stress">0%</span>
+                </div>
+            </div>
+
+            <div class="hud-actions">
+                <button class="icon-btn active" id="btn-heatmap" title="Spänningskarta">🌡️</button>
+                <button class="icon-btn" id="btn-undo" title="Ångra">↩️</button>
+                <button class="icon-btn" id="btn-clear" title="Rensa">🗑️</button>
+                <button class="icon-btn" id="btn-mute" title="Ljud av/på">🔊</button>
+            </div>
+        </header>
+
+        <!-- VÄNSTER VERKTYGSLÅDA -->
+        <aside class="toolbox">
+            <button class="tool-btn active" id="tool-build" title="Bygg balk / pelare">
+                <span>🏗️</span>
+                <span>Balk</span>
+            </button>
+            <button class="tool-btn" id="tool-strut" title="Kryss-sträva mot vind & skjuvning">
+                <span>📐</span>
+                <span>Sträva</span>
+            </button>
+            <button class="tool-btn" id="tool-foundation" title="Platsgjuten betonggrund">
+                <span>🧱</span>
+                <span>Grund</span>
+            </button>
+            <button class="tool-btn" id="tool-pile" title="Slagen betongpåle till berg">
+                <span>📍</span>
+                <span>Påle</span>
+            </button>
+            <div class="divider"></div>
+            <button class="tool-btn" id="tool-inspect" title="Inspektera hållfasthet & krafter">
+                <span>🔍</span>
+                <span>Analys</span>
+            </button>
+            <button class="tool-btn" id="tool-delete" title="Riv / Ta bort element">
+                <span>❌</span>
+                <span>Riv</span>
+            </button>
+        </aside>
+
+        <!-- TEST-LÄGE HUD -->
+        <div class="test-hud-overlay" id="test-hud" style="display: none;">
+            <span class="stat-label">⏱️ Testtid Kvar</span>
+            <div class="test-timer" id="test-timer-val">10.0s</div>
+        </div>
+
+        <!-- SANDLÅDE KATASTROFLABB (Visas i sandlådeläge) -->
+        <div class="sandbox-drawer" id="sandbox-drawer" style="display: none;">
+            <div class="slider-header">
+                <span>🌪️ Vindstyrka</span>
+                <strong id="val-wind">0 m/s</strong>
+            </div>
+            <input type="range" id="slider-wind" min="0" max="60" value="0">
+
+            <div class="slider-header">
+                <span>🌧️ Regn & Skyfall</span>
+                <strong id="val-rain">0%</strong>
+            </div>
+            <input type="range" id="slider-rain" min="0" max="100" value="0">
+
+            <div class="slider-header">
+                <span>🌋 Jordbävning</span>
+                <strong id="val-quake">Mag 0.0</strong>
+            </div>
+            <input type="range" id="slider-quake" min="0" max="8.5" step="0.1" value="0">
+
+            <label class="checkbox-group">
+                <input type="checkbox" id="check-slide">
+                <span>⚠️ Aktivera Jordskred</span>
+            </label>
+        </div>
+
+        <!-- INSPEKTIONSKORT FÖR HÅLLFASTHET -->
+        <div class="inspection-card" id="inspection-card"></div>
+
+        <!-- BOTTENPANEL: MATERIAL & KNAPPAR -->
+        <footer class="bottom-dock">
+            <div class="material-shelf" id="material-list"></div>
+            
+            <div class="action-bar" id="build-controls">
+                <button class="btn btn-primary" id="btn-start-test">
+                    <span>⚡ TESTA KONSTRUKTIONEN</span>
+                </button>
+            </div>
+
+            <div class="action-bar" id="test-controls" style="display: none;">
+                <button class="btn btn-danger" id="btn-stop-test">
+                    <span>⏹️ AVBRYT / ÅTERGÅ TILL BYGGLÄGE</span>
+                </button>
+            </div>
+        </footer>
+
+        <!-- MODAL: BESIKTNINGSRAPPORT -->
+        <div class="modal-backdrop" id="report-modal" style="display: none;"></div>
+
+        <!-- MODAL: UPPDRAGS- & NIVÅVÄLJARE -->
+        <div class="modal-backdrop" id="level-modal" style="display: none;">
+            <div class="modal-content">
+                <div class="card-header">
+                    <h2>🗺️ Välj Byggnadsuppdrag</h2>
+                    <button class="close-btn" onclick="document.getElementById('level-modal').style.display='none'">✕</button>
+                </div>
+                <div class="level-grid" id="level-grid"></div>
+            </div>
+        </div>
+
+        <!-- TOAST NOTIS -->
+        <div class="toast" id="toast">Välkommen till Structon!</div>
+    </div>
+
+    <!-- Modulskript -->
+    <script type="module" src="js/game/game.js"></script>
+</body>
+</html>

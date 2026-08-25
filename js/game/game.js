@@ -27,7 +27,9 @@ export class StructonGame {
 
         // Fasadmontage före lastpåföring
         this.facadeProgress = 0;
-        this.claddingDuration = 2.4;
+        this.claddingDuration = 3.8;
+        this.claddingHoldTimer = 0;
+        this.claddingHoldDuration = 0.55;
         this.claddingRooms = [];
         this.lastFacadeMountIndex = -1;
 
@@ -95,6 +97,7 @@ export class StructonGame {
 
         this.gameState = 'build';
         this.facadeProgress = 0;
+        this.claddingHoldTimer = 0;
         this.claddingRooms = [];
         this.lastFacadeMountIndex = -1;
         this.physics.reset();
@@ -199,10 +202,14 @@ export class StructonGame {
             style: facadeStyle
         }));
         this.facadeProgress = 0;
+        this.claddingHoldTimer = 0;
         this.lastFacadeMountIndex = -1;
-        this.claddingDuration = Math.max(1.6, Math.min(4.2, 1.1 + this.claddingRooms.length * 0.28));
+        // Tydlig montagefas: minst ~3.5 s så spelaren hinner se fasaderna innan last
+        this.claddingDuration = Math.max(3.5, Math.min(6.5, 2.8 + this.claddingRooms.length * 0.45));
         this.gameState = 'cladding';
         this.testTimer = 0;
+        const scenario = this.currentLevel.testScenario;
+        this.testDuration = scenario.duration;
         const scenario = this.currentLevel.testScenario;
         this.testDuration = scenario.duration;
 
@@ -267,21 +274,27 @@ export class StructonGame {
 
     updateCladding(dt) {
         if (this.gameState !== 'cladding') return;
-        this.facadeProgress = Math.min(1, this.facadeProgress + dt / this.claddingDuration);
 
-        const rooms = this.claddingRooms;
-        if (rooms.length) {
-            const mountIndex = Math.min(
-                rooms.length - 1,
-                Math.floor(this.facadeProgress * rooms.length)
-            );
-            if (mountIndex > this.lastFacadeMountIndex) {
-                this.lastFacadeMountIndex = mountIndex;
-                this.audio.playFacadeMount(rooms[mountIndex]?.style || 'glass');
+        if (this.facadeProgress < 1) {
+            this.facadeProgress = Math.min(1, this.facadeProgress + dt / this.claddingDuration);
+
+            const rooms = this.claddingRooms;
+            if (rooms.length) {
+                const mountIndex = Math.min(
+                    rooms.length - 1,
+                    Math.floor(this.facadeProgress * rooms.length)
+                );
+                if (mountIndex > this.lastFacadeMountIndex) {
+                    this.lastFacadeMountIndex = mountIndex;
+                    this.audio.playFacadeMount(rooms[mountIndex]?.style || 'glass');
+                }
             }
+            return;
         }
 
-        if (this.facadeProgress >= 1) {
+        // Kort paus med färdig fasad innan lasterna påförs
+        this.claddingHoldTimer += dt;
+        if (this.claddingHoldTimer >= this.claddingHoldDuration) {
             this.beginLoadPhase();
         }
     }
@@ -291,6 +304,7 @@ export class StructonGame {
         this.audio.updateWind(0);
         this.audio.updateEarthquake(0);
         this.facadeProgress = 0;
+        this.claddingHoldTimer = 0;
         this.claddingRooms = [];
         this.lastFacadeMountIndex = -1;
 

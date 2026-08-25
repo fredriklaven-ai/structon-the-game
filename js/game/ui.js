@@ -43,9 +43,11 @@ export class UIManager {
         // Undo/Redo historik
         this.history = [];
         this.historyIndex = -1;
+        this.chromeResizeObserver = null;
 
         this.initEvents();
         this.initDPI();
+        this.observeChrome();
     }
 
     initDPI() {
@@ -88,6 +90,10 @@ export class UIManager {
         // Fönsterstorleksändring
         window.addEventListener('resize', () => {
             this.initDPI();
+            requestAnimationFrame(() => {
+                this.layoutChrome();
+                this.fitOverview();
+            });
         });
 
         // 1. Mus- och pekarhändelser
@@ -131,10 +137,24 @@ export class UIManager {
 
     layoutChrome() {
         const hud = document.querySelector('.top-hud');
-        const toolbox = document.querySelector('.toolbox');
-        if (!hud || !toolbox) return;
+        const app = document.getElementById('app');
+        const dock = document.querySelector('.bottom-dock');
+        if (!hud || !app) return;
         const h = hud.getBoundingClientRect();
-        toolbox.style.top = `${Math.round(h.bottom + 8)}px`;
+        const hudBottom = Math.round(h.bottom + 8);
+        const bottomReserve = dock ? Math.max(16, this.displayHeight - dock.getBoundingClientRect().top + 8) : 24;
+        const panelHeight = Math.max(72, this.displayHeight - hudBottom - bottomReserve);
+        app.style.setProperty('--hud-bottom', `${hudBottom}px`);
+        app.style.setProperty('--upper-panel-max-height', `${panelHeight}px`);
+    }
+
+    observeChrome() {
+        const hud = document.querySelector('.top-hud');
+        if (!hud || typeof ResizeObserver === 'undefined') return;
+        this.chromeResizeObserver = new ResizeObserver(() => {
+            this.layoutChrome();
+        });
+        this.chromeResizeObserver.observe(hud);
     }
 
     zoomBy(factor, screenX = null, screenY = null) {

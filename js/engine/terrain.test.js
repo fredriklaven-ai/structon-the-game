@@ -109,6 +109,76 @@ test('huslast över tunn täckning får taket att rasa', () => {
     assert.equal(physics.nodes.some(n => n.fixed === false), true);
 });
 
+test('normal femvåningsstomme belastar tunneln via upplagsreaktionerna', () => {
+    const terrain = new TerrainEngine({
+        seed: 13,
+        surfaceY: 0,
+        bedrockY: -5,
+        surfaceAmp: 0,
+        bedrockAmp: 0,
+        tunnels: [{ x: 0, width: 12, height: 5, cover: 0.8, name: 'stadstunnel' }]
+    });
+    const physics = new PhysicsEngine();
+    physics.terrain = terrain;
+
+    const columnX = [-4, 0, 4];
+    const floors = 5;
+    const nodesByColumn = [];
+
+    for (const x of columnX) {
+        const column = [];
+        const support = physics.addNode(x, terrain.surfaceY(x), true, 'stiff_soil');
+        support.isGroundAnchor = true;
+        column.push(support);
+        for (let floor = 1; floor <= floors; floor++) {
+            column.push(physics.addNode(x, floor * 3.2, false));
+        }
+        nodesByColumn.push(column);
+    }
+
+    for (let c = 0; c < nodesByColumn.length; c++) {
+        for (let floor = 1; floor <= floors; floor++) {
+            physics.addMember(
+                nodesByColumn[c][floor - 1],
+                nodesByColumn[c][floor],
+                'concrete_reinforced'
+            );
+        }
+    }
+    for (let floor = 1; floor <= floors; floor++) {
+        for (let c = 0; c < nodesByColumn.length - 1; c++) {
+            physics.addMember(
+                nodesByColumn[c][floor],
+                nodesByColumn[c + 1][floor],
+                'concrete_reinforced'
+            );
+        }
+    }
+
+    // 5 kPa nyttig + permanent last över två 4x6 m fack motsvarar
+    // cirka 36 ton per våning, fördelat på de tre våningsnoderna.
+    physics.updateNodeMasses();
+    for (const column of nodesByColumn) {
+        for (let floor = 1; floor <= floors; floor++) {
+            column[floor].mass += 12000;
+        }
+    }
+
+    const totalWeightN = physics.nodes.reduce((sum, node) => sum + node.mass * 9.81, 0);
+    const reactions = terrain.calculateSupportReactions(physics.nodes);
+    const reactionSumN = reactions.reduce((sum, reaction) => sum + reaction.reactionN, 0);
+    assert.equal(reactions.length, 3, 'tre pelare ska ge tre upplagsreaktioner');
+    assert.ok(Math.abs(reactionSumN - totalWeightN) < 1, 'upplagen ska bära hela stommens vikt');
+
+    const assessment = terrain.assessTunnelLoads(physics.nodes)[0];
+    assert.equal(assessment.supportReactions.length, 3);
+    assert.ok(assessment.buildingN > 1.7e6, 'övre våningarnas last ska nå tunneltaket');
+    assert.ok(assessment.utilization > 1.02, 'den tunna bergtäckningen ska överbelastas');
+
+    physics.evaluateTunnelRoofLoads();
+    assert.equal(terrain.collapsedTunnels.has(terrain.tunnels[0].id), true);
+});
+
 test('påle som når fast berg förankras, påle i tunnel gör det inte', () => {
     const terrain = new TerrainEngine({
         seed: 8, surfaceY: 0, bedrockY: -5, surfaceAmp: 0.1, bedrockAmp: 0.1,

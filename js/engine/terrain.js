@@ -303,13 +303,94 @@ export class TerrainEngine {
         return rockW + soilW;
     }
 
-    buildingLoadOverTunnelN(nodes, tunnel) {
-        let mass = 0;
-        for (const n of nodes) {
-            if (!this.isNodeOnTunnelCover(n, tunnel)) continue;
-            mass += n.mass || 0;
+    /**
+     * Vertikala upplagsreaktioner från hela sammanhängande stommen.
+     *
+     * Varje nodlast fördelas till närmast omslutande upplag med statisk
+     * hävstångsfördelning. Därmed följer vikten från alla övre våningar
+     * lastvägen ner till grundens upplag, i stället för att bara räkna noder
+     * som råkar ligga nära tunnelns tak.
+     */
+    calculateSupportReactions(nodes) {
+        const nodeSet = new Set(nodes);
+        const visited = new Set();
+        const reactions = [];
+
+        for (const start of nodes) {
+            if (visited.has(start)) continue;
+
+            const component = [];
+            const stack = [start];
+            visited.add(start);
+
+            while (stack.length) {
+                const node = stack.pop();
+                component.push(node);
+                for (const member of node.connectedMembers || []) {
+                    if (member.isBroken) continue;
+                    const other = member.nodeA === node ? member.nodeB : member.nodeA;
+                    if (!other || !nodeSet.has(other) || visited.has(other)) continue;
+                    visited.add(other);
+                    stack.push(other);
+                }
+            }
+
+            const supports = component
+                .filter(node => node.fixed || node.isGroundAnchor || node.isBedrockPinned)
+                .sort((a, b) => a.x - b.x);
+            if (!supports.length) continue;
+
+            const componentReactions = new Map(supports.map(node => [node, 0]));
+            let componentMassKg = 0;
+
+            for (const loadNode of component) {
+                const massKg = Math.max(0, loadNode.mass || 0);
+                if (massKg === 0) continue;
+                componentMassKg += massKg;
+                const loadN = massKg * GRAVITY;
+
+                if (supports.length === 1 || loadNode.x <= supports[0].x) {
+                    const support = supports[0];
+                    componentReactions.set(support, componentReactions.get(support) + loadN);
+                    continue;
+                }
+
+                const last = supports[supports.length - 1];
+                if (loadNode.x >= last.x) {
+                    componentReactions.set(last, componentReactions.get(last) + loadN);
+                    continue;
+                }
+
+                for (let i = 0; i < supports.length - 1; i++) {
+                    const left = supports[i];
+                    const right = supports[i + 1];
+                    if (loadNode.x < left.x || loadNode.x > right.x) continue;
+                    const span = Math.max(1e-6, right.x - left.x);
+                    const rightShare = (loadNode.x - left.x) / span;
+                    componentReactions.set(left, componentReactions.get(left) + loadN * (1 - rightShare));
+                    componentReactions.set(right, componentReactions.get(right) + loadN * rightShare);
+                    break;
+                }
+            }
+
+            for (const support of supports) {
+                reactions.push({
+                    node: support,
+                    reactionN: componentReactions.get(support),
+                    componentMassKg
+                });
+            }
         }
-        return mass * GRAVITY;
+
+        return reactions;
+    }
+
+    buildingLoadOverTunnelN(nodes, tunnel, supportReactions = null) {
+        const reactions = supportReactions || this.calculateSupportReactions(nodes);
+        return reactions.reduce((sum, reaction) => {
+            if (!this.isNodeOnTunnelCover(reaction.node, tunnel)) return sum;
+            return sum + reaction.reactionN;
+        }, 0);
     }
 
     isNodeOnTunnelCover(node, tunnel) {
@@ -321,10 +402,14 @@ export class TerrainEngine {
     }
 
     assessTunnelLoads(nodes) {
+        const allSupportReactions = this.calculateSupportReactions(nodes);
         return this.tunnels.map(tunnel => {
             const cap = this.tunnelRoofCapacity(tunnel);
             const overburden = this.overburdenWeightN(tunnel);
-            const building = this.buildingLoadOverTunnelN(nodes, tunnel);
+            const supportReactions = allSupportReactions.filter(reaction =>
+                this.isNodeOnTunnelCover(reaction.node, tunnel)
+            );
+            const building = this.buildingLoadOverTunnelN(nodes, tunnel, allSupportReactions);
             // Tunneln antas redan stå i jämvikt med jord/bergöverlasten efter utsprängning.
             // Ny huslast jämförs mot bergskivans kvarvarande kapacitet.
             const total = building;
@@ -334,6 +419,7 @@ export class TerrainEngine {
                 ...cap,
                 overburdenN: overburden,
                 buildingN: building,
+                supportReactions,
                 totalN: total,
                 utilization,
                 collapsed: this.collapsedTunnels.has(tunnel.id)

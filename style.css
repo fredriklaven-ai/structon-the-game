@@ -16,6 +16,8 @@
     --text-secondary: #94A3B8;
     --font-mono: 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace;
     --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --hud-bottom: 74px;
+    --upper-panel-max-height: calc(100dvh - 160px);
 }
 
 * {
@@ -198,9 +200,9 @@ body, html {
    ========================================================= */
 .toolbox {
     position: absolute;
-    top: 74px;
+    top: var(--hud-bottom);
     left: 10px;
-    max-height: calc(100dvh - 160px - env(safe-area-inset-bottom, 0px));
+    max-height: var(--upper-panel-max-height);
     overflow-y: auto;
     overscroll-behavior: contain;
     background: var(--bg-panel);
@@ -419,7 +421,7 @@ body, html {
    ========================================================= */
 .test-hud-overlay {
     position: absolute;
-    top: 74px;
+    top: var(--hud-bottom);
     right: 10px;
     background: var(--bg-panel);
     backdrop-filter: blur(14px);
@@ -694,7 +696,7 @@ body, html {
    ========================================================= */
 .sandbox-drawer {
     position: absolute;
-    top: 74px;
+    top: var(--hud-bottom);
     right: 10px;
     width: 240px;
     background: var(--bg-panel);
@@ -707,7 +709,7 @@ body, html {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    max-height: calc(100dvh - 160px);
+    max-height: var(--upper-panel-max-height);
     overflow-y: auto;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
@@ -765,7 +767,7 @@ input[type="range"]::-webkit-slider-thumb {
    ========================================================= */
 .toast {
     position: absolute;
-    top: 74px;
+    top: var(--hud-bottom);
     left: 50%;
     transform: translateX(-50%) translateY(-20px);
     background: var(--bg-panel);
@@ -813,8 +815,32 @@ input[type="range"]::-webkit-slider-thumb {
     }
     .game-title-group h1 { font-size: 12px; }
     .level-badge { display: none; }
+    .hud-left { flex: 1 1 auto; }
+    .hud-stats {
+        order: 3;
+        flex: 1 1 100%;
+        justify-content: space-between;
+        gap: 8px;
+    }
+    .stat-box { align-items: flex-start; }
+    .hud-actions {
+        order: 2;
+        width: 100%;
+        min-width: 0;
+        margin-left: 0;
+        justify-content: space-between;
+    }
+    .hud-actions > .icon-btn {
+        width: 32px;
+        height: 32px;
+    }
+    .zoom-cluster .icon-btn {
+        width: 30px;
+        height: 32px;
+    }
+    .hud-invig { flex: 1 1 120px; }
     .stat-val { font-size: 11px; }
-    .toolbox { top: 60px; left: 8px; max-height: calc(100dvh - 140px); }
+    .toolbox { left: 8px; }
     .tool-btn { width: 38px; height: 38px; font-size: 15px; }
     .bottom-dock { bottom: max(8px, env(safe-area-inset-bottom)); left: 6px; right: 6px; }
     .mat-card { min-width: 95px; padding: 4px 6px; }
@@ -822,5 +848,32 @@ input[type="range"]::-webkit-slider-thumb {
     .btn { height: 42px; font-size: 12px; padding: 0 16px; }
     .btn-invig { height: 36px; font-size: 11px; }
     .inspection-card { width: 210px; font-size: 10px; }
-    .sandbox-drawer { width: 200px; top: 60px; }
+    .sandbox-drawer { width: min(200px, calc(100vw - 76px)); }
+}
+
+@media (max-height: 420px) {
+    .top-hud {
+        top: max(4px, env(safe-area-inset-top));
+        padding: 4px 8px;
+        gap: 4px 8px;
+    }
+    .game-title-group h1 { display: none; }
+    .level-badge { display: block; font-size: 9px; }
+    .hud-stats { gap: 8px; }
+    .stat-label { font-size: 7px; }
+    .stat-val { font-size: 9px; }
+    .icon-btn,
+    .zoom-cluster .icon-btn {
+        width: 30px;
+        height: 30px;
+    }
+    .btn-invig {
+        height: 32px;
+        padding: 0 10px;
+        font-size: 10px;
+    }
+    .bottom-dock { bottom: 4px; }
+    .material-shelf { padding: 4px 8px; }
+    .mat-card { min-width: 88px; padding: 3px 6px; }
+    .tool-btn { width: 34px; height: 34px; font-size: 13px; }
 }

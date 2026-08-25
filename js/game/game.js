@@ -9,6 +9,7 @@ import { AudioManager } from './audio.js';
 import { UIManager } from './ui.js';
 import { LEVELS, SANDBOX_LEVEL } from './levels.js';
 import { MATERIALS } from '../engine/materials.js';
+import { TerrainEngine, buildAnchorNodes } from '../engine/terrain.js';
 
 export class StructonGame {
     constructor() {
@@ -92,12 +93,20 @@ export class StructonGame {
         this.audio.updateWind(0);
         this.audio.updateEarthquake(0);
 
-        // Skapa mark- och grundförankringsnoder
-        if (this.currentLevel.ground && this.currentLevel.ground.anchorNodes) {
-            for (const n of this.currentLevel.ground.anchorNodes) {
-                const node = this.physics.addNode(n.x, n.y, n.fixed, n.soil);
-                node.isBedrockPinned = n.isBedrock || false;
-            }
+        const terrain = new TerrainEngine(this.currentLevel.ground || {});
+        this.physics.terrain = terrain;
+        this.environment.terrain = terrain;
+        terrain.onTunnelCollapse = (tunnel) => {
+            this.audio.playCrack('concrete_cast');
+            this.showToast(`Bergtaket över ${tunnel.name || 'tunneln'} rasade under huslasten!`);
+        };
+
+        const anchors = buildAnchorNodes(terrain, this.currentLevel.ground || {});
+        for (const n of anchors) {
+            const node = this.physics.addNode(n.x, n.y, n.fixed, n.soil);
+            node.isBedrockPinned = n.isBedrock || false;
+            node.initialBedrockPinned = node.isBedrockPinned;
+            node.isGroundAnchor = true;
         }
 
         // Återställ kameravy
@@ -118,7 +127,14 @@ export class StructonGame {
         this.updateMaterialPalette();
         this.updateHUD();
         this.ui.saveState();
-        this.showToast(`Uppdrag: ${this.currentLevel.name}`);
+        const t = this.physics.terrain;
+        const geo = [];
+        if (t?.tunnels.length) geo.push('bergstunnel');
+        if (t?.ravines.length) geo.push('klyfta');
+        if (t?.cracks.length) geo.push('spricka');
+        this.showToast(geo.length
+            ? `${this.currentLevel.name} · ${geo.join(', ')} – kontrollera bergtäckning`
+            : `Uppdrag: ${this.currentLevel.name}`);
     }
 
     updateMaterialPalette() {
@@ -167,6 +183,7 @@ export class StructonGame {
         this.audio.playClick();
 
         this.physics.resetToBlueprint();
+        if (this.physics.terrain) this.physics.terrain.resetRuntime();
         this.gameState = 'test';
         this.testTimer = 0;
         const scenario = this.currentLevel.testScenario;
@@ -201,6 +218,7 @@ export class StructonGame {
         if (testHud) testHud.style.display = 'none';
 
         this.physics.resetToBlueprint();
+        if (this.physics.terrain) this.physics.terrain.resetRuntime();
 
         if (returnToBuild) {
             this.gameState = 'build';

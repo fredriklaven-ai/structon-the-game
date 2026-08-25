@@ -13,7 +13,7 @@ export class UIManager {
 
         // Kamera & Vy
         this.zoom = 24;          // Pixlar per meter
-        this.minZoom = 8;
+        this.minZoom = 4;
         this.maxZoom = 60;
         this.panX = 0;           // Canvas pixlar
         this.panY = 0;
@@ -188,12 +188,8 @@ export class UIManager {
         } else {
             // Skapa ny startnod vid snäppposition
             const snapped = this.snapToGrid(world);
-            // Om under mark, kolla om det är grund
-            const isGround = snapped.y <= 0;
             const node = this.game.physics.addNode(snapped.x, snapped.y, false);
-            if (isGround) {
-                node.soilType = this.game.currentLevel ? this.game.currentLevel.ground.soilType : 'stiff_soil';
-            }
+            this.applyNodeGeology(node, snapped.x, snapped.y);
             this.dragStartNode = node;
             this.game.audio.playPlaceNode();
         }
@@ -252,9 +248,7 @@ export class UIManager {
                 // Skapa inte om samma punkt
                 if (Math.hypot(snapped.x - this.dragStartNode.x, snapped.y - this.dragStartNode.y) > 0.4) {
                     endNode = this.game.physics.addNode(snapped.x, snapped.y, false);
-                    if (snapped.y <= 0) {
-                        endNode.soilType = this.game.currentLevel ? this.game.currentLevel.ground.soilType : 'stiff_soil';
-                    }
+                    this.applyNodeGeology(endNode, snapped.x, snapped.y);
                 }
             }
 
@@ -293,6 +287,29 @@ export class UIManager {
         this.dragStartNode = null;
     }
 
+    applyNodeGeology(node, x, y) {
+        const terrain = this.game.physics.terrain;
+        if (!terrain) {
+            if (y <= 0) {
+                node.soilType = this.game.currentLevel ? this.game.currentLevel.ground.soilType : 'stiff_soil';
+            }
+            return;
+        }
+        const cls = terrain.classify(x, y);
+        if (cls === 'rock') node.soilType = 'bedrock';
+        else if (cls === 'soil' || y <= terrain.surfaceY(x) + 0.25) {
+            node.soilType = terrain.soilType;
+        }
+    }
+
+    visibleWorldBounds(pad = 12) {
+        const left = -this.panX / this.zoom - pad;
+        const right = (this.displayWidth - this.panX) / this.zoom + pad;
+        const top = this.panY / this.zoom + pad;
+        const bottom = (this.panY - this.displayHeight) / this.zoom - pad;
+        return { left, right, top, bottom };
+    }
+
     findMemberUnder(wx, wy, maxDist = 0.5) {
         for (const m of this.game.physics.members) {
             if (m.isBroken) continue;
@@ -317,11 +334,58 @@ export class UIManager {
         if (member) {
             this.inspectedMember = member;
             this.renderInspectionCard(member);
-        } else {
-            this.inspectedMember = null;
-            const card = document.getElementById('inspection-card');
-            if (card) card.style.display = 'none';
+            return;
         }
+        this.inspectedMember = null;
+        const terrain = this.game.physics.terrain;
+        if (terrain) {
+            this.renderGeologyCard(world.x, world.y, terrain);
+            return;
+        }
+        const card = document.getElementById('inspection-card');
+        if (card) card.style.display = 'none';
+    }
+
+    renderGeologyCard(x, y, terrain) {
+        const card = document.getElementById('inspection-card');
+        if (!card) return;
+        const cls = terrain.classify(x, y);
+        const surf = terrain.surfaceY(x);
+        const rock = terrain.bedrockY(x);
+        const water = terrain.waterSurfaceY(x);
+        const labels = {
+            air: 'Luft / ovan mark',
+            water: 'Vatten',
+            soil: SOIL_TYPES[terrain.soilType]?.name || 'Jord',
+            rock: 'Fast urberg',
+            tunnel: 'Bergtunnel (hålrum)',
+            crack: 'Bergsspricka'
+        };
+        let extra = '';
+        const assessments = terrain.assessTunnelLoads(this.game.physics.nodes);
+        for (const a of assessments) {
+            if (!terrain.isOverTunnel(x, a.tunnel) && cls !== 'tunnel') continue;
+            const util = Math.round(a.utilization * 100);
+            extra += `<div class="stat-row"><span>Tunnel:</span> <strong>${a.tunnel.name || 'Bergtunnel'}</strong></div>
+                <div class="stat-row"><span>Bergtäckning / spännvidd:</span> <strong>${a.cover.toFixed(1)} m / ${a.span.toFixed(1)} m</strong></div>
+                <div class="stat-row"><span>Huslast mot taket:</span> <strong>${(a.buildingN / 1000).toFixed(0)} kN</strong></div>
+                <div class="stat-row"><span>Bergkapacitet:</span> <strong>${(a.capacityN / 1000).toFixed(0)} kN (${util}%)</strong></div>`;
+        }
+        card.innerHTML = `
+            <div class="card-header">
+                <h4>Geologi vid ${x.toFixed(1)} m</h4>
+                <button class="close-btn" onclick="document.getElementById('inspection-card').style.display='none'">✕</button>
+            </div>
+            <div class="card-body">
+                <div class="stat-row"><span>Klass:</span> <strong>${labels[cls] || cls}</strong></div>
+                <div class="stat-row"><span>Markyta:</span> <strong>${surf.toFixed(2)} m</strong></div>
+                <div class="stat-row"><span>Bergöveryta:</span> <strong>${rock.toFixed(2)} m</strong></div>
+                <div class="stat-row"><span>Jordmäktighet:</span> <strong>${(surf - rock).toFixed(2)} m</strong></div>
+                ${water != null ? `<div class="stat-row"><span>Vattenyta:</span> <strong>${water.toFixed(2)} m</strong></div>` : ''}
+                ${extra}
+            </div>
+        `;
+        card.style.display = 'block';
     }
 
     renderInspectionCard(member) {
@@ -368,7 +432,10 @@ export class UIManager {
     saveState() {
         // Spara nod- och balkkonfiguration för Undo
         const snapshot = {
-            nodes: this.game.physics.nodes.map(n => ({ x: n.x, y: n.y, fixed: n.fixed, soilType: n.soilType, id: n.id })),
+            nodes: this.game.physics.nodes.map(n => ({
+                x: n.x, y: n.y, fixed: n.fixed, soilType: n.soilType, id: n.id,
+                isBedrockPinned: n.isBedrockPinned, isGroundAnchor: n.isGroundAnchor
+            })),
             members: this.game.physics.members.filter(m => !m.isBroken).map(m => ({
                 nodeAIdx: this.game.physics.nodes.indexOf(m.nodeA),
                 nodeBIdx: this.game.physics.nodes.indexOf(m.nodeB),
@@ -396,6 +463,9 @@ export class UIManager {
         const nodeMap = [];
         for (const nData of snapshot.nodes) {
             const node = this.game.physics.addNode(nData.x, nData.y, nData.fixed, nData.soilType);
+            node.isBedrockPinned = !!nData.isBedrockPinned;
+            node.initialBedrockPinned = node.isBedrockPinned;
+            node.isGroundAnchor = !!nData.isGroundAnchor;
             nodeMap.push(node);
         }
 
@@ -493,105 +563,338 @@ export class UIManager {
     }
 
     renderGround(ctx) {
-        const lvl = this.game.currentLevel;
-        const ground = lvl ? lvl.ground : { leftX: -30, rightX: 30, surfaceY: 0, bedrockY: -6, soilType: 'stiff_soil' };
+        const terrain = this.game.physics.terrain;
         const env = this.game.environment;
+        const lvl = this.game.currentLevel;
+        const ground = lvl ? lvl.ground : { soilType: 'stiff_soil' };
 
-        const leftX = ground.leftX * this.zoom;
-        const rightX = ground.rightX * this.zoom;
-        const topY = -ground.surfaceY * this.zoom;
-        const bedrockY = -ground.bedrockY * this.zoom;
-        const bottomY = 500; // djupt ner
+        ctx.save();
+        ctx.translate(env.groundOffsetX * this.zoom, -env.groundOffsetY * this.zoom);
 
-        // Jordskredsoffset
-        const slideX = env.landslideProgress * 3.5 * this.zoom;
-        const slideY = -env.landslideProgress * 1.8 * this.zoom;
+        const view = this.visibleWorldBounds(18);
+        const z = this.zoom;
+        const deepY = Math.min(view.bottom - 8, -28);
 
-        // 1. Berggrund (fast berg)
-        ctx.fillStyle = '#1E293B';
+        if (!terrain) {
+            this.renderFlatGroundFallback(ctx, ground, z, deepY);
+            ctx.restore();
+            return;
+        }
+
+        const profile = terrain.sampleProfile(view.left, view.right, Math.max(0.28, 10 / z));
+
+        this.renderDistantHills(ctx, profile, z);
+
+        // 1. Berggrund – fyllning med hål för tunnlar och sprickor
+        ctx.fillStyle = '#1B2434';
         ctx.beginPath();
-        ctx.rect(leftX - 200, bedrockY, (rightX - leftX) + 400, bottomY);
-        ctx.fill();
+        ctx.moveTo(profile[0].x * z, -deepY * z);
+        for (const p of profile) {
+            ctx.lineTo(p.x * z, -p.bedrockY * z);
+        }
+        ctx.lineTo(profile[profile.length - 1].x * z, -deepY * z);
+        ctx.closePath();
 
-        // Bergstexturmönster
-        ctx.strokeStyle = '#334155';
-        ctx.lineWidth = 1;
-        for (let x = leftX - 100; x < rightX + 100; x += 40) {
+        for (const tunnel of terrain.tunnels) {
+            if (terrain.collapsedTunnels.has(tunnel.id)) continue;
+            ctx.moveTo((tunnel.x + tunnel.width / 2) * z, -tunnel.y * z);
+            ctx.ellipse(tunnel.x * z, -tunnel.y * z, (tunnel.width / 2) * z, (tunnel.height / 2) * z, 0, 0, Math.PI * 2, true);
+        }
+        for (const crack of terrain.cracks) {
+            const poly = terrain.crackPolygon(crack);
+            ctx.moveTo((crack.x - poly.topHalf) * z, -poly.topY * z);
+            ctx.lineTo((crack.x + poly.topHalf) * z, -poly.topY * z);
+            ctx.lineTo((crack.x + poly.botHalf) * z, -poly.botY * z);
+            ctx.lineTo((crack.x - poly.botHalf) * z, -poly.botY * z);
+            ctx.closePath();
+        }
+        ctx.fill('evenodd');
+
+        // Berglager / skikt som följer bergytan
+        ctx.strokeStyle = 'rgba(71, 85, 105, 0.55)';
+        ctx.lineWidth = 1.2;
+        for (let k = 1; k <= 4; k++) {
             ctx.beginPath();
-            ctx.moveTo(x, bedrockY);
-            ctx.lineTo(x + 25, bottomY);
+            let started = false;
+            for (const p of profile) {
+                const y = p.bedrockY - k * 1.35 - Math.sin(p.x * 0.21 + k) * 0.25;
+                const sx = p.x * z;
+                const sy = -y * z;
+                if (!started) {
+                    ctx.moveTo(sx, sy);
+                    started = true;
+                } else {
+                    ctx.lineTo(sx, sy);
+                }
+            }
             ctx.stroke();
         }
 
-        // 2. Jordlager (Morän eller Känslig lera)
+        // Diagonala bergfogar
+        ctx.strokeStyle = 'rgba(51, 65, 85, 0.45)';
+        ctx.lineWidth = 1;
+        const jointStart = Math.floor(view.left / 7) * 7;
+        for (let x = jointStart; x < view.right; x += 7) {
+            const by = terrain.bedrockY(x);
+            ctx.beginPath();
+            ctx.moveTo(x * z, -by * z);
+            ctx.lineTo((x + 5.5) * z, -(by - 14) * z);
+            ctx.stroke();
+        }
+
+        // 2. Jordlager mellan markyta och berg
+        const soilColor = ground.soilType === 'soft_clay' ? '#5A2A18' : '#3E2723';
+        const slideX = ground.hasClayLayer ? env.landslideProgress * 3.5 * z : 0;
+        const slideY = ground.hasClayLayer ? -env.landslideProgress * 1.8 * z : 0;
         ctx.save();
-        if (ground.hasClayLayer && env.landslideProgress > 0) {
-            ctx.translate(slideX, slideY);
-        }
-
-        ctx.fillStyle = ground.soilType === 'soft_clay' ? '#5A2A18' : '#3E2723';
+        ctx.translate(slideX, slideY);
+        ctx.fillStyle = soilColor;
         ctx.beginPath();
-        ctx.moveTo(leftX - 100, bedrockY);
-        ctx.lineTo(leftX - 100, topY);
-
-        if (ground.slopeAngle && ground.slopeAngle !== 0) {
-            ctx.lineTo(rightX + 100, topY + (rightX - leftX) * 0.08);
-        } else {
-            ctx.lineTo(rightX + 100, topY);
+        ctx.moveTo(profile[0].x * z, -profile[0].bedrockY * z);
+        for (const p of profile) ctx.lineTo(p.x * z, -p.surfaceY * z);
+        for (let i = profile.length - 1; i >= 0; i--) {
+            ctx.lineTo(profile[i].x * z, -profile[i].bedrockY * z);
         }
-
-        ctx.lineTo(rightX + 100, bedrockY);
         ctx.closePath();
         ctx.fill();
 
-        // Markyta (Gräs / Grus)
+        // Gräs / markyta längs den kuperade silhuetten
         ctx.strokeStyle = ground.soilType === 'soft_clay' ? '#854D0E' : '#15803D';
-        ctx.lineWidth = 4;
+        ctx.lineWidth = Math.max(3, z * 0.14);
+        ctx.lineJoin = 'round';
         ctx.beginPath();
-        ctx.moveTo(leftX - 100, topY);
-        if (ground.slopeAngle && ground.slopeAngle !== 0) {
-            ctx.lineTo(rightX + 100, topY + (rightX - leftX) * 0.08);
-        } else {
-            ctx.lineTo(rightX + 100, topY);
+        for (let i = 0; i < profile.length; i++) {
+            const sx = profile[i].x * z;
+            const sy = -profile[i].surfaceY * z;
+            if (i === 0) ctx.moveTo(sx, sy);
+            else ctx.lineTo(sx, sy);
         }
         ctx.stroke();
 
+        // Grästuvor som följer lutningen
+        if (ground.soilType !== 'soft_clay' && z > 10) {
+            ctx.strokeStyle = 'rgba(22, 163, 74, 0.7)';
+            ctx.lineWidth = 1.3;
+            ctx.beginPath();
+            for (let i = 2; i < profile.length - 2; i += 3) {
+                const p = profile[i];
+                const dx = profile[i + 1].x - profile[i - 1].x;
+                const dy = profile[i + 1].surfaceY - profile[i - 1].surfaceY;
+                const len = Math.hypot(dx, dy) || 1;
+                const nx = -dy / len;
+                const ny = dx / len;
+                const blade = 0.35 + (i % 5) * 0.04;
+                ctx.moveTo(p.x * z, -p.surfaceY * z);
+                ctx.lineTo((p.x + nx * blade) * z, -(p.surfaceY + ny * blade) * z);
+            }
+            ctx.stroke();
+        }
         ctx.restore();
 
-        // Textetiketter för geologiska lager
+        // 3. Vatten i klyftor och vattenspeglar
+        this.renderWater(ctx, terrain, profile, env.time, z);
+
+        // 4. Tunnlar – mörkt hålrum, lining och lastvarning
+        this.renderTunnels(ctx, terrain, z);
+
+        // 5. Synliga sprickor
+        this.renderCracks(ctx, terrain, z);
+
+        // 6. Geologiska etiketter i den synliga vyn
+        this.renderGeologyLabels(ctx, terrain, ground, view, z);
+
+        ctx.restore();
+    }
+
+    renderFlatGroundFallback(ctx, ground, z, deepY) {
+        const left = -80 * z;
+        const right = 80 * z;
+        ctx.fillStyle = '#1E293B';
+        ctx.fillRect(left, -(ground.bedrockY || -6) * z, right - left, -deepY * z + 800);
+        ctx.fillStyle = ground.soilType === 'soft_clay' ? '#5A2A18' : '#3E2723';
+        ctx.fillRect(left, 0, right - left, -(ground.bedrockY || -6) * z);
+        ctx.strokeStyle = '#15803D';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(left, 0);
+        ctx.lineTo(right, 0);
+        ctx.stroke();
+    }
+
+    renderDistantHills(ctx, profile, z) {
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
+        ctx.beginPath();
+        ctx.moveTo(profile[0].x * z, -18 * z);
+        for (const p of profile) {
+            const y = p.surfaceY * 0.42 + 9 + Math.sin(p.x * 0.04) * 1.8;
+            ctx.lineTo(p.x * z, -y * z);
+        }
+        ctx.lineTo(profile[profile.length - 1].x * z, 40 * z);
+        ctx.lineTo(profile[0].x * z, 40 * z);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    renderWater(ctx, terrain, profile, time, z) {
+        ctx.save();
+        const segments = [];
+        let run = null;
+        for (const p of profile) {
+            if (p.waterY != null && p.waterY > p.surfaceY + 0.05) {
+                if (!run) run = [];
+                run.push(p);
+            } else if (run) {
+                segments.push(run);
+                run = null;
+            }
+        }
+        if (run) segments.push(run);
+
+        for (const seg of segments) {
+            ctx.beginPath();
+            const first = seg[0];
+            ctx.moveTo(first.x * z, -first.surfaceY * z);
+            for (const p of seg) ctx.lineTo(p.x * z, -p.surfaceY * z);
+            for (let i = seg.length - 1; i >= 0; i--) {
+                const p = seg[i];
+                const wave = Math.sin(p.x * 1.15 + time * 2.4) * 0.08;
+                ctx.lineTo(p.x * z, -(p.waterY + wave) * z);
+            }
+            ctx.closePath();
+            const top = Math.max(...seg.map(p => p.waterY));
+            const bot = Math.min(...seg.map(p => p.surfaceY));
+            const grad = ctx.createLinearGradient(0, -top * z, 0, -bot * z);
+            grad.addColorStop(0, 'rgba(56, 189, 248, 0.55)');
+            grad.addColorStop(1, 'rgba(12, 74, 110, 0.72)');
+            ctx.fillStyle = grad;
+            ctx.fill();
+
+            ctx.strokeStyle = 'rgba(186, 230, 253, 0.65)';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            for (let i = 0; i < seg.length; i++) {
+                const p = seg[i];
+                const wave = Math.sin(p.x * 1.15 + time * 2.4) * 0.08;
+                const sx = p.x * z;
+                const sy = -(p.waterY + wave) * z;
+                if (i === 0) ctx.moveTo(sx, sy);
+                else ctx.lineTo(sx, sy);
+            }
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    renderTunnels(ctx, terrain, z) {
+        const nodes = this.game.physics.nodes;
+        const assessments = terrain.assessTunnelLoads(nodes);
+        for (const a of assessments) {
+            const t = a.tunnel;
+            const cx = t.x * z;
+            const cy = -t.y * z;
+            const rx = (t.width / 2) * z;
+            const ry = (t.height / 2) * z;
+
+            if (terrain.collapsedTunnels.has(t.id)) {
+                ctx.fillStyle = 'rgba(71, 85, 105, 0.7)';
+                ctx.beginPath();
+                ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#94A3B8';
+                ctx.font = `${Math.max(10, z * 0.45)}px monospace`;
+                ctx.textAlign = 'center';
+                ctx.fillText('RASAD TUNNEL', cx, cy);
+                continue;
+            }
+
+            ctx.fillStyle = '#020617';
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = Math.max(2, z * 0.12);
+            ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo((t.x - t.width * 0.32) * z, -(t.y - t.height * 0.18) * z);
+            ctx.lineTo((t.x + t.width * 0.32) * z, -(t.y - t.height * 0.18) * z);
+            ctx.stroke();
+
+            const util = a.utilization;
+            let color = '#38BDF8';
+            if (util > 1) color = '#EF4444';
+            else if (util > 0.7) color = '#F59E0B';
+            ctx.fillStyle = color;
+            ctx.font = `${Math.max(10, z * 0.42)}px monospace`;
+            ctx.textAlign = 'center';
+            ctx.fillText(`🚇 ${t.name || 'TUNNEL'}`, cx, cy - ry - 8);
+            ctx.fillText(`täckning ${a.cover.toFixed(1)}m · last ${Math.round(util * 100)}%`, cx, cy - ry + 8);
+        }
+    }
+
+    renderCracks(ctx, terrain, z) {
+        ctx.save();
+        for (const crack of terrain.cracks) {
+            const poly = terrain.crackPolygon(crack);
+            ctx.fillStyle = '#020617';
+            ctx.beginPath();
+            ctx.moveTo((crack.x - poly.topHalf) * z, -poly.topY * z);
+            ctx.lineTo((crack.x + poly.topHalf) * z, -poly.topY * z);
+            ctx.lineTo((crack.x + poly.botHalf) * z, -poly.botY * z);
+            ctx.lineTo((crack.x - poly.botHalf) * z, -poly.botY * z);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#7F1D1D';
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+            ctx.fillStyle = '#F87171';
+            ctx.font = `${Math.max(9, z * 0.38)}px monospace`;
+            ctx.textAlign = 'center';
+            ctx.fillText('SPRICKA', crack.x * z, -(poly.topY + 0.6) * z);
+        }
+        ctx.restore();
+    }
+
+    renderGeologyLabels(ctx, terrain, ground, view, z) {
+        ctx.save();
         ctx.font = '11px monospace';
+        ctx.textAlign = 'left';
+        const labelX = Math.max(view.left + 1.5, (ground.leftX ?? -10));
+        const surf = terrain.surfaceY(labelX);
+        const rock = terrain.bedrockY(labelX);
+        const midSoil = (surf + rock) / 2;
         ctx.fillStyle = '#94A3B8';
-        ctx.fillText(`⛰️ FAST URBERG (${ground.bedrockY}m)`, leftX + 10, bedrockY + 22);
-        ctx.fillText(`🌱 ${SOIL_TYPES[ground.soilType || 'stiff_soil'].name.toUpperCase()}`, leftX + 10, topY + 25);
+        ctx.fillText(`⛰️ URBERG (${rock.toFixed(1)} m)`, labelX * z, -rock * z + 16);
+        ctx.fillStyle = ground.soilType === 'soft_clay' ? '#FBBF24' : '#86EFAC';
+        ctx.fillText(`🌱 ${SOIL_TYPES[ground.soilType || 'stiff_soil'].name.toUpperCase()}`, labelX * z, -midSoil * z);
+        ctx.restore();
     }
 
     renderGrid(ctx) {
         const step = this.gridSize * this.zoom;
-        const minX = -40 * this.zoom;
-        const maxX = 40 * this.zoom;
-        const minY = -120 * this.zoom;
-        const maxY = 15 * this.zoom;
+        const view = this.visibleWorldBounds(4);
+        const minX = view.left * this.zoom;
+        const maxX = view.right * this.zoom;
+        const minY = -view.top * this.zoom;
+        const maxY = -view.bottom * this.zoom;
 
         ctx.strokeStyle = 'rgba(56, 189, 248, 0.07)';
         ctx.lineWidth = 1;
 
         ctx.beginPath();
-        for (let x = minX; x <= maxX; x += step) {
+        const x0 = Math.floor(view.left) * this.zoom;
+        const y0 = Math.floor(view.bottom) * this.zoom;
+        for (let x = x0; x <= maxX; x += step) {
             ctx.moveTo(x, minY);
             ctx.lineTo(x, maxY);
         }
-        for (let y = minY; y <= maxY; y += step) {
-            ctx.moveTo(minX, y);
-            ctx.lineTo(maxX, y);
+        for (let y = y0; y <= view.top * this.zoom + step; y += step) {
+            ctx.moveTo(minX, -y);
+            ctx.lineTo(maxX, -y);
         }
-        ctx.stroke();
-
-        // Marklinje (Y = 0)
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(minX, 0);
-        ctx.lineTo(maxX, 0);
         ctx.stroke();
     }
 

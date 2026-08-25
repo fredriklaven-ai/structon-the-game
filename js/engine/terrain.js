@@ -364,6 +364,35 @@ export class TerrainEngine {
         }
         return points;
     }
+
+    overviewBounds(pad = 6, targetHeight = 0) {
+        let minX = -24;
+        let maxX = 24;
+        const features = [
+            ...(this.ravines || []),
+            ...(this.tunnels || []),
+            ...(this.cracks || []),
+            ...(this.waterBodies || [])
+        ];
+        for (const f of features) {
+            const half = (f.width || 2) / 2;
+            minX = Math.min(minX, f.x - half - 4);
+            maxX = Math.max(maxX, f.x + half + 4);
+        }
+        minX -= pad;
+        maxX += pad;
+        let minY = this.bedrockY((minX + maxX) / 2) - 10;
+        let maxY = Math.max(8, targetHeight);
+        for (const t of this.tunnels || []) {
+            minY = Math.min(minY, t.y - (t.height || 4) / 2 - 3);
+        }
+        for (const x of [minX, 0, maxX]) {
+            maxY = Math.max(maxY, this.surfaceY(x) + 4);
+            minY = Math.min(minY, this.bedrockY(x) - 4);
+        }
+        maxY = Math.max(maxY, targetHeight + 3);
+        return { minX, maxX, minY, maxY };
+    }
 }
 
 export function buildAnchorNodes(terrain, ground) {

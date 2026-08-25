@@ -13,7 +13,7 @@ export class UIManager {
 
         // Kamera & Vy
         this.zoom = 24;          // Pixlar per meter
-        this.minZoom = 4;
+        this.minZoom = 1.5;
         this.maxZoom = 60;
         this.panX = 0;           // Canvas pixlar
         this.panY = 0;
@@ -56,6 +56,7 @@ export class UIManager {
         this.ctx.scale(dpr, dpr);
         this.displayWidth = rect.width;
         this.displayHeight = rect.height;
+        this.layoutChrome();
 
         // Centrera kameran på markytan
         if (this.panX === 0 && this.panY === 0) {
@@ -112,6 +113,82 @@ export class UIManager {
 
         // Förhindra högerklicksmeny
         this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        window.addEventListener('keydown', (e) => {
+            if (e.target && ['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+            if (e.key === '-' || e.key === '_') {
+                e.preventDefault();
+                this.zoomBy(0.8);
+            } else if (e.key === '+' || e.key === '=') {
+                e.preventDefault();
+                this.zoomBy(1.25);
+            } else if (e.key === '0') {
+                e.preventDefault();
+                this.fitOverview();
+            }
+        });
+    }
+
+    layoutChrome() {
+        const hud = document.querySelector('.top-hud');
+        const toolbox = document.querySelector('.toolbox');
+        if (!hud || !toolbox) return;
+        const h = hud.getBoundingClientRect();
+        toolbox.style.top = `${Math.round(h.bottom + 8)}px`;
+    }
+
+    zoomBy(factor, screenX = null, screenY = null) {
+        const sx = screenX == null ? this.displayWidth / 2 : screenX;
+        const sy = screenY == null ? this.displayHeight / 2 : screenY;
+        const worldBefore = this.screenToWorld(sx, sy);
+        this.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.zoom * factor));
+        this.panX = sx - worldBefore.x * this.zoom;
+        this.panY = sy + worldBefore.y * this.zoom;
+    }
+
+    /**
+     * Zooma ut så att tomt, klyftor, vatten, sprickor och tunnlar syns i vyn.
+     */
+    fitOverview() {
+        const lvl = this.game.currentLevel;
+        const terrain = this.game.physics.terrain;
+        let minX = -24;
+        let maxX = 24;
+        let minY = -12;
+        let maxY = Math.max(8, lvl?.targetHeight || 0);
+
+        if (terrain) {
+            const b = terrain.overviewBounds(6, lvl?.targetHeight || 0);
+            minX = b.minX;
+            maxX = b.maxX;
+            minY = b.minY;
+            maxY = b.maxY;
+        } else if (lvl?.ground) {
+            minX = (lvl.ground.leftX ?? -24) - 6;
+            maxX = (lvl.ground.rightX ?? 24) + 6;
+            minY = (lvl.ground.bedrockY ?? -8) - 6;
+        }
+
+        const hud = document.querySelector('.top-hud');
+        const dock = document.querySelector('.bottom-dock');
+        const padTop = (hud ? hud.getBoundingClientRect().height : 64) + 18;
+        const padBottom = (dock ? dock.getBoundingClientRect().height : 64) + 18;
+        const padLeft = 72;
+        const padRight = 24;
+        const availW = Math.max(120, this.displayWidth - padLeft - padRight);
+        const availH = Math.max(120, this.displayHeight - padTop - padBottom);
+        const worldW = Math.max(12, maxX - minX);
+        const worldH = Math.max(10, maxY - minY);
+        const zoom = Math.max(this.minZoom, Math.min(this.maxZoom, Math.min(availW / worldW, availH / worldH) * 0.92));
+        this.zoom = zoom;
+
+        const midX = (minX + maxX) / 2;
+        const midY = (minY + maxY) / 2;
+        const cx = padLeft + availW / 2;
+        const cy = padTop + availH / 2;
+        this.panX = cx - midX * this.zoom;
+        this.panY = cy + midY * this.zoom;
+        this.layoutChrome();
     }
 
     getCanvasCoords(e) {

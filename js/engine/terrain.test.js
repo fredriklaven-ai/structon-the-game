@@ -151,6 +151,19 @@ test('bygghöjd mäts ovanför markytan, inte i världs-Y', () => {
     assert.ok(Math.abs(physics.stats.buildingHeight - 6.5) < 0.15, `fick ${physics.stats.buildingHeight}`);
 });
 
+test('översiktsgräns rymmer klyfta, spricka och tunnel', () => {
+    const t = terrainFor(SANDBOX_LEVEL);
+    const b = t.overviewBounds(6, 0);
+    const ravine = SANDBOX_LEVEL.ground.ravines[0];
+    const tunnel = t.tunnels[0];
+    const crack = SANDBOX_LEVEL.ground.cracks[0];
+    assert.ok(b.minX < ravine.x - ravine.width / 2);
+    assert.ok(b.maxX > tunnel.x + tunnel.width / 2);
+    assert.ok(b.minX < crack.x);
+    assert.ok(b.minY < tunnel.y);
+    assert.ok(b.maxX - b.minX > 40);
+});
+
 test('alla kampanjnivåer har sammanhängande terrängprofiler', () => {
     for (const level of [...LEVELS, SANDBOX_LEVEL]) {
         const t = terrainFor(level);

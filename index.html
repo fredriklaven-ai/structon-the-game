@@ -2,7 +2,7 @@
 <html lang="sv">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Structon The Game - Konstruktion & Bärverksfysik</title>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -37,6 +37,21 @@
             </div>
 
             <div class="hud-actions">
+                <div class="zoom-cluster" title="Zooma och visa hela geologin">
+                    <button class="icon-btn" id="btn-zoom-out" title="Zooma ut (− / scrollhjul)">−</button>
+                    <button class="icon-btn" id="btn-zoom-fit" title="Visa hela tomten, klyftor och tunnlar (0)">⤢</button>
+                    <button class="icon-btn" id="btn-zoom-in" title="Zooma in (+)">+</button>
+                </div>
+                <div class="hud-invig" id="build-controls">
+                    <button class="btn btn-primary btn-invig" id="btn-start-test" title="Starta besiktning och katastroftest">
+                        Invig projektet
+                    </button>
+                </div>
+                <div class="hud-invig" id="test-controls" style="display: none;">
+                    <button class="btn btn-danger btn-invig" id="btn-stop-test">
+                        Avbryt invigning
+                    </button>
+                </div>
                 <button class="icon-btn active" id="btn-heatmap" title="Spänningskarta">🌡️</button>
                 <button class="icon-btn" id="btn-undo" title="Ångra">↩️</button>
                 <button class="icon-btn" id="btn-clear" title="Rensa">🗑️</button>
@@ -108,21 +123,9 @@
         <!-- INSPEKTIONSKORT FÖR HÅLLFASTHET -->
         <div class="inspection-card" id="inspection-card"></div>
 
-        <!-- BOTTENPANEL: MATERIAL & KNAPPAR -->
+        <!-- BOTTENPANEL: MATERIAL -->
         <footer class="bottom-dock">
             <div class="material-shelf" id="material-list"></div>
-            
-            <div class="action-bar" id="build-controls">
-                <button class="btn btn-primary" id="btn-start-test">
-                    <span>⚡ TESTA KONSTRUKTIONEN</span>
-                </button>
-            </div>
-
-            <div class="action-bar" id="test-controls" style="display: none;">
-                <button class="btn btn-danger" id="btn-stop-test">
-                    <span>⏹️ AVBRYT / ÅTERGÅ TILL BYGGLÄGE</span>
-                </button>
-            </div>
         </footer>
 
         <!-- MODAL: BESIKTNINGSRAPPORT -->

@@ -109,11 +109,8 @@ export class StructonGame {
             node.isGroundAnchor = true;
         }
 
-        // Återställ kameravy
-        const hasTunnels = (this.currentLevel.ground?.tunnels || []).length > 0;
-        this.ui.panX = this.ui.displayWidth / 2;
-        this.ui.panY = this.ui.displayHeight * (hasTunnels ? 0.58 : (this.currentLevel.targetHeight > 40 ? 0.82 : 0.66));
-        this.ui.zoom = this.currentLevel.targetHeight > 50 ? 11 : (hasTunnels ? 18 : 22);
+        // Visa hela tomten, klyftor, vatten, sprickor och tunnlar
+        this.ui.fitOverview();
 
         // Visa/dölj sandlådekontroller
         const sandboxDrawer = document.getElementById('sandbox-drawer');
@@ -202,12 +199,14 @@ export class StructonGame {
         this.audio.updateEarthquake(scenario.earthquake);
 
         // Byt UI-knappar och visa test-timer
-        document.getElementById('build-controls').style.display = 'none';
-        document.getElementById('test-controls').style.display = 'flex';
+        const buildEl = document.getElementById('build-controls');
+        const testEl = document.getElementById('test-controls');
+        if (buildEl) buildEl.style.display = 'none';
+        if (testEl) testEl.style.display = 'flex';
         const testHud = document.getElementById('test-hud');
         if (testHud) testHud.style.display = 'flex';
 
-        this.showToast(`Startar stresstest: ${scenario.name}!`);
+        this.showToast(`Invigning: ${scenario.name}!`);
     }
 
     stopTest(returnToBuild = true) {
@@ -223,8 +222,10 @@ export class StructonGame {
 
         if (returnToBuild) {
             this.gameState = 'build';
-            document.getElementById('build-controls').style.display = 'flex';
-            document.getElementById('test-controls').style.display = 'none';
+            const buildEl = document.getElementById('build-controls');
+            const testEl = document.getElementById('test-controls');
+            if (buildEl) buildEl.style.display = 'flex';
+            if (testEl) testEl.style.display = 'none';
             this.showToast('Återgick till byggläge.');
         }
     }
@@ -432,7 +433,7 @@ export class StructonGame {
             }
         });
 
-        // Test start/stop
+        // Invigning & avbryt
         const startTestBtn = document.getElementById('btn-start-test');
         if (startTestBtn) {
             startTestBtn.addEventListener('click', () => this.startTest());
@@ -441,6 +442,13 @@ export class StructonGame {
         if (stopTestBtn) {
             stopTestBtn.addEventListener('click', () => this.stopTest(true));
         }
+
+        const zoomOut = document.getElementById('btn-zoom-out');
+        const zoomIn = document.getElementById('btn-zoom-in');
+        const zoomFit = document.getElementById('btn-zoom-fit');
+        if (zoomOut) zoomOut.addEventListener('click', () => { this.audio.init(); this.ui.zoomBy(0.8); });
+        if (zoomIn) zoomIn.addEventListener('click', () => { this.audio.init(); this.ui.zoomBy(1.25); });
+        if (zoomFit) zoomFit.addEventListener('click', () => { this.audio.init(); this.ui.fitOverview(); });
 
         // Undo & Clear
         const undoBtn = document.getElementById('btn-undo');

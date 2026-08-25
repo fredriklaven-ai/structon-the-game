@@ -1,0 +1,16 @@
+{
+  "name": "Structon The Game",
+  "terminals": [
+    {
+      "name": "web-server",
+      "command": "node server.js",
+      "description": "Static dev server for Structon The Game, serving index.html and the ES modules on http://localhost:3000."
+    }
+  ],
+  "ports": [
+    {
+      "name": "web server",
+      "port": 3000
+    }
+  ]
+}

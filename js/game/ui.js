@@ -465,7 +465,7 @@ export class UIManager {
             const util = Math.round(a.utilization * 100);
             extra += `<div class="stat-row"><span>Tunnel:</span> <strong>${a.tunnel.name || 'Bergtunnel'}</strong></div>
                 <div class="stat-row"><span>Bergtäckning / spännvidd:</span> <strong>${a.cover.toFixed(1)} m / ${a.span.toFixed(1)} m</strong></div>
-                <div class="stat-row"><span>Huslast mot taket:</span> <strong>${(a.buildingN / 1000).toFixed(0)} kN</strong></div>
+                <div class="stat-row"><span>Upplagsreaktioner över tunnel:</span> <strong>${(a.buildingN / 1000).toFixed(0)} kN (${a.supportReactions.length} st)</strong></div>
                 <div class="stat-row"><span>Bergkapacitet:</span> <strong>${(a.capacityN / 1000).toFixed(0)} kN (${util}%)</strong></div>`;
         }
         card.innerHTML = `

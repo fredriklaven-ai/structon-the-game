@@ -210,8 +210,6 @@ export class StructonGame {
         this.testTimer = 0;
         const scenario = this.currentLevel.testScenario;
         this.testDuration = scenario.duration;
-        const scenario = this.currentLevel.testScenario;
-        this.testDuration = scenario.duration;
 
         // Inga katastroflaster under fasadmontage
         this.environment.setDisasterLevels({

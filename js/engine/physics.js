@@ -625,44 +625,149 @@ export class PhysicsEngine {
         this.stats.maxTopSway = parseFloat(maxSway.toFixed(2));
     }
 
+    _memberAngleDeg(member) {
+        const dx = member.nodeB.x - member.nodeA.x;
+        const dy = member.nodeB.y - member.nodeA.y;
+        return Math.abs(Math.atan2(dy, dx) * 180 / Math.PI);
+    }
+
+    _memberConnects(member, nodeP, nodeQ, tol = 0.65) {
+        const ends = [member.nodeA, member.nodeB];
+        const near = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) < tol;
+        return (near(ends[0], nodeP) && near(ends[1], nodeQ)) ||
+            (near(ends[1], nodeP) && near(ends[0], nodeQ));
+    }
+
     // Upptäcker slutna 4-sidiga våningsplan (rum) för rendering av fönster, belysning och inredning
     detectRooms() {
         const rooms = [];
-        // Enkel våningsrumsdetektion baserad på rektangulära noder
-        // Sortera noder i våningsplan
         const activeMembers = this.members.filter(m => !m.isBroken && !m.material.isStrut);
-        
-        // Hitta horisontella och vertikala balkar
-        const horiz = activeMembers.filter(m => Math.abs(m.nodeA.y - m.nodeB.y) < 0.4);
-        const vert = activeMembers.filter(m => Math.abs(m.nodeA.x - m.nodeB.x) < 0.4);
+        // Vinkelbaserat: tål kuperad mark och dragriktning vid placering
+        const horiz = activeMembers.filter(m => {
+            const a = this._memberAngleDeg(m);
+            return a < 22 || a > 158;
+        });
+        const vert = activeMembers.filter(m => {
+            const a = this._memberAngleDeg(m);
+            return a > 68 && a < 112;
+        });
 
         for (const bottom of horiz) {
             for (const top of horiz) {
                 if (bottom === top) continue;
-                const dy = top.nodeA.y - bottom.nodeA.y;
-                if (dy > 1.8 && dy < 5.0) { // Rimlig våningshöjd 2-5 meter
-                    // Kolla om det finns vänster och höger pelare
-                    const leftCol = vert.find(v => 
-                        (Math.hypot(v.nodeA.x - bottom.nodeA.x, v.nodeA.y - bottom.nodeA.y) < 0.5 && Math.hypot(v.nodeB.x - top.nodeA.x, v.nodeB.y - top.nodeA.y) < 0.5) ||
-                        (Math.hypot(v.nodeB.x - bottom.nodeA.x, v.nodeB.y - bottom.nodeA.y) < 0.5 && Math.hypot(v.nodeA.x - top.nodeA.x, v.nodeA.y - top.nodeA.y) < 0.5)
-                    );
-                    const rightCol = vert.find(v => 
-                        (Math.hypot(v.nodeA.x - bottom.nodeB.x, v.nodeA.y - bottom.nodeB.y) < 0.5 && Math.hypot(v.nodeB.x - top.nodeB.x, v.nodeB.y - top.nodeB.y) < 0.5) ||
-                        (Math.hypot(v.nodeB.x - bottom.nodeB.x, v.nodeB.y - bottom.nodeB.y) < 0.5 && Math.hypot(v.nodeA.x - top.nodeB.x, v.nodeA.y - top.nodeB.y) < 0.5)
-                    );
 
-                    if (leftCol && rightCol) {
-                        rooms.push({
-                            bottomA: bottom.nodeA,
-                            bottomB: bottom.nodeB,
-                            topA: top.nodeA,
-                            topB: top.nodeB,
-                            floorLevel: Math.round(bottom.nodeA.y / 3.2)
-                        });
-                    }
-                }
+                const bLeft = bottom.nodeA.x <= bottom.nodeB.x ? bottom.nodeA : bottom.nodeB;
+                const bRight = bottom.nodeA.x <= bottom.nodeB.x ? bottom.nodeB : bottom.nodeA;
+                const tLeft = top.nodeA.x <= top.nodeB.x ? top.nodeA : top.nodeB;
+                const tRight = top.nodeA.x <= top.nodeB.x ? top.nodeB : top.nodeA;
+
+                const bottomY = (bLeft.y + bRight.y) / 2;
+                const topY = (tLeft.y + tRight.y) / 2;
+                const dy = topY - bottomY;
+                if (dy <= 1.6 || dy >= 6.5) continue;
+
+                // Kräv att bjälklagen ungefär överlappar i X
+                const overlapLeft = Math.max(bLeft.x, tLeft.x);
+                const overlapRight = Math.min(bRight.x, tRight.x);
+                if (overlapRight - overlapLeft < 1.2) continue;
+
+                const leftCol = vert.find(v => this._memberConnects(v, bLeft, tLeft));
+                const rightCol = vert.find(v => this._memberConnects(v, bRight, tRight));
+                if (!leftCol || !rightCol) continue;
+
+                const leftX = Math.min(bLeft.x, tLeft.x);
+                const rightX = Math.max(bRight.x, tRight.x);
+                rooms.push({
+                    bottomA: bLeft,
+                    bottomB: bRight,
+                    topA: tLeft,
+                    topB: tRight,
+                    leftX,
+                    rightX,
+                    bottomY: Math.min(bLeft.y, bRight.y),
+                    topY: Math.max(tLeft.y, tRight.y),
+                    floorLevel: Math.round(bottomY / 3.2),
+                    width: rightX - leftX,
+                    height: topY - bottomY
+                });
             }
         }
-        return rooms;
+
+        // Deduplicera nästan identiska rum
+        const unique = [];
+        for (const room of rooms) {
+            const dup = unique.find(u =>
+                Math.abs(u.leftX - room.leftX) < 0.3 &&
+                Math.abs(u.rightX - room.rightX) < 0.3 &&
+                Math.abs(u.bottomY - room.bottomY) < 0.3 &&
+                Math.abs(u.topY - room.topY) < 0.3
+            );
+            if (!dup) unique.push(room);
+        }
+        return unique;
+    }
+
+    /**
+     * Reserv: klär in stommens ytterkontur i våningshöga paneler när
+     * slutna fack inte detekteras (sneda bjälklag / ofullständig snäppning).
+     */
+    detectEnvelopeBays() {
+        const active = this.members.filter(m => !m.isBroken && !m.material.isStrut);
+        if (active.length < 3) return [];
+
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const m of active) {
+            for (const n of [m.nodeA, m.nodeB]) {
+                minX = Math.min(minX, n.x);
+                maxX = Math.max(maxX, n.x);
+                minY = Math.min(minY, n.y);
+                maxY = Math.max(maxY, n.y);
+            }
+        }
+        const width = maxX - minX;
+        const height = maxY - minY;
+        if (width < 1.5 || height < 1.8) return [];
+
+        const storeyH = 3.2;
+        const bays = [];
+        let y = minY;
+        let floor = 0;
+        while (y + 1.5 < maxY + 0.01) {
+            const next = Math.min(maxY, y + storeyH);
+            if (next - y >= 1.5) {
+                bays.push({
+                    leftX: minX,
+                    rightX: maxX,
+                    bottomY: y,
+                    topY: next,
+                    floorLevel: floor,
+                    width,
+                    height: next - y,
+                    isEnvelope: true
+                });
+            }
+            y = next;
+            floor++;
+        }
+        return bays;
+    }
+
+    /**
+     * Fasadbås sorterade underifrån och från vänster – montageordning vid invigning.
+     */
+    getFacadeBays(styleHint = null) {
+        let rooms = this.detectRooms();
+        if (!rooms.length) {
+            rooms = this.detectEnvelopeBays();
+        }
+        rooms.sort((a, b) => {
+            if (a.floorLevel !== b.floorLevel) return a.floorLevel - b.floorLevel;
+            return a.leftX - b.leftX;
+        });
+        return rooms.map((room, index) => ({
+            ...room,
+            mountIndex: index,
+            style: styleHint
+        }));
     }
 }

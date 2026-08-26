@@ -20,10 +20,18 @@ export class StructonGame {
         this.ui = new UIManager(this, this.canvas);
 
         // Speltillstånd
-        this.gameState = 'build'; // 'build', 'test', 'simulate', 'report'
+        this.gameState = 'build'; // 'build', 'cladding', 'test', 'simulate', 'report'
         this.currentLevelIndex = 0;
         this.currentLevel = null;
         this.isSandbox = false;
+
+        // Fasadmontage före lastpåföring
+        this.facadeProgress = 0;
+        this.claddingDuration = 3.8;
+        this.claddingHoldTimer = 0;
+        this.claddingHoldDuration = 0.55;
+        this.claddingRooms = [];
+        this.lastFacadeMountIndex = -1;
 
         // Testscenario och tidtagning
         this.testTimer = 0;
@@ -88,6 +96,10 @@ export class StructonGame {
         }
 
         this.gameState = 'build';
+        this.facadeProgress = 0;
+        this.claddingHoldTimer = 0;
+        this.claddingRooms = [];
+        this.lastFacadeMountIndex = -1;
         this.physics.reset();
         this.environment.reset();
         this.audio.updateWind(0);
@@ -182,23 +194,33 @@ export class StructonGame {
 
         this.physics.resetToBlueprint();
         if (this.physics.terrain) this.physics.terrain.resetRuntime();
-        this.gameState = 'test';
+
+        // Fasaderna monteras och klär in stommen innan lasterna påförs.
+        const facadeStyle = this.resolveFacadeStyle();
+        this.claddingRooms = this.physics.getFacadeBays(facadeStyle).map(room => ({
+            ...room,
+            style: facadeStyle
+        }));
+        this.facadeProgress = 0;
+        this.claddingHoldTimer = 0;
+        this.lastFacadeMountIndex = -1;
+        // Tydlig montagefas: minst ~3.5 s så spelaren hinner se fasaderna innan last
+        this.claddingDuration = Math.max(3.5, Math.min(6.5, 2.8 + this.claddingRooms.length * 0.45));
+        this.gameState = 'cladding';
         this.testTimer = 0;
         const scenario = this.currentLevel.testScenario;
         this.testDuration = scenario.duration;
 
-        // Applicera katastrofinställningar
+        // Inga katastroflaster under fasadmontage
         this.environment.setDisasterLevels({
-            wind: scenario.wind,
-            rain: scenario.rain,
-            earthquake: scenario.earthquake,
-            landslide: scenario.landslide
+            wind: 0,
+            rain: 0,
+            earthquake: 0,
+            landslide: false
         });
+        this.audio.updateWind(0);
+        this.audio.updateEarthquake(0);
 
-        this.audio.updateWind(scenario.wind);
-        this.audio.updateEarthquake(scenario.earthquake);
-
-        // Byt UI-knappar och visa test-timer
         const buildEl = document.getElementById('build-controls');
         const testEl = document.getElementById('test-controls');
         if (buildEl) buildEl.style.display = 'none';
@@ -206,13 +228,83 @@ export class StructonGame {
         const testHud = document.getElementById('test-hud');
         if (testHud) testHud.style.display = 'flex';
 
-        this.showToast(`Invigning: ${scenario.name}!`);
+        this.showToast(this.claddingRooms.length
+            ? 'Monterar fasader som klär in stommen...'
+            : 'Stommen saknar slutna fack – lasterna påförs direkt.');
+
+        if (!this.claddingRooms.length) {
+            this.beginLoadPhase();
+        }
+    }
+
+    resolveFacadeStyle() {
+        const lvl = this.currentLevel;
+        const allowed = lvl?.allowedMaterials || [];
+        if (lvl?.category === 'residential' || allowed.includes('wood')) {
+            if (allowed.includes('brick') && lvl?.category === 'commercial') return 'brick';
+            if (lvl?.category === 'residential') return 'wood';
+        }
+        if (allowed.includes('brick') && (lvl?.category === 'commercial' || lvl?.id === 'level_2')) return 'brick';
+        if (lvl?.category === 'airport') return 'glass';
+        if (lvl?.category === 'highrise' || lvl?.category === 'skyscraper' || lvl?.category === 'megastructure') {
+            return 'curtain';
+        }
+        if (allowed.includes('steel')) return 'curtain';
+        if (allowed.includes('brick')) return 'brick';
+        return 'glass';
+    }
+
+    beginLoadPhase() {
+        const scenario = this.currentLevel.testScenario;
+        this.facadeProgress = 1;
+        this.gameState = 'test';
+        this.testTimer = 0;
+        this.environment.setDisasterLevels({
+            wind: scenario.wind,
+            rain: scenario.rain,
+            earthquake: scenario.earthquake,
+            landslide: scenario.landslide
+        });
+        this.audio.updateWind(scenario.wind);
+        this.audio.updateEarthquake(scenario.earthquake);
+        this.showToast(`Lasterna påförs: ${scenario.name}!`);
+    }
+
+    updateCladding(dt) {
+        if (this.gameState !== 'cladding') return;
+
+        if (this.facadeProgress < 1) {
+            this.facadeProgress = Math.min(1, this.facadeProgress + dt / this.claddingDuration);
+
+            const rooms = this.claddingRooms;
+            if (rooms.length) {
+                const mountIndex = Math.min(
+                    rooms.length - 1,
+                    Math.floor(this.facadeProgress * rooms.length)
+                );
+                if (mountIndex > this.lastFacadeMountIndex) {
+                    this.lastFacadeMountIndex = mountIndex;
+                    this.audio.playFacadeMount(rooms[mountIndex]?.style || 'glass');
+                }
+            }
+            return;
+        }
+
+        // Kort paus med färdig fasad innan lasterna påförs
+        this.claddingHoldTimer += dt;
+        if (this.claddingHoldTimer >= this.claddingHoldDuration) {
+            this.beginLoadPhase();
+        }
     }
 
     stopTest(returnToBuild = true) {
         this.environment.reset();
         this.audio.updateWind(0);
         this.audio.updateEarthquake(0);
+        this.facadeProgress = 0;
+        this.claddingHoldTimer = 0;
+        this.claddingRooms = [];
+        this.lastFacadeMountIndex = -1;
 
         const testHud = document.getElementById('test-hud');
         if (testHud) testHud.style.display = 'none';
@@ -347,7 +439,11 @@ export class StructonGame {
             this.lastFrameTime = timestamp;
 
             if (!this.isPaused) {
-                if (this.gameState === 'test' || this.gameState === 'simulate') {
+                if (this.gameState === 'cladding') {
+                    // Fasadmontage: stommen står stilla medan fasaderna monteras
+                    this.physics.calculateStats();
+                    this.updateCladding(dt);
+                } else if (this.gameState === 'test' || this.gameState === 'simulate') {
                     // Uppdatera aktiv dynamisk fysik och miljö vid test
                     this.physics.step(dt, this.environment);
                     this.environment.update(dt);
@@ -384,6 +480,7 @@ export class StructonGame {
         const stressEl = document.getElementById('hud-stress');
         const levelNameEl = document.getElementById('hud-level-name');
         const timerEl = document.getElementById('test-timer-val');
+        const timerLabel = document.getElementById('test-hud-label');
 
         if (levelNameEl) levelNameEl.innerText = lvl.name;
         if (heightEl) heightEl.innerText = `${stats.buildingHeight}m / ${lvl.targetHeight}m`;
@@ -400,9 +497,16 @@ export class StructonGame {
             stressEl.style.color = pct > 90 ? '#EF4444' : pct > 70 ? '#F59E0B' : '#34D399';
         }
 
-        if (timerEl && this.gameState === 'test') {
-            const timeLeft = Math.max(0, this.testDuration - this.testTimer).toFixed(1);
-            timerEl.innerText = `${timeLeft}s`;
+        if (timerEl) {
+            if (this.gameState === 'cladding') {
+                const pct = Math.round(this.facadeProgress * 100);
+                timerEl.innerText = `${pct}%`;
+                if (timerLabel) timerLabel.innerText = '🏗️ Fasadmontage';
+            } else if (this.gameState === 'test') {
+                const timeLeft = Math.max(0, this.testDuration - this.testTimer).toFixed(1);
+                timerEl.innerText = `${timeLeft}s`;
+                if (timerLabel) timerLabel.innerText = '⏱️ Testtid Kvar';
+            }
         }
     }
 

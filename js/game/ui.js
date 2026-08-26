@@ -602,11 +602,11 @@ export class UIManager {
             this.renderGrid(ctx);
         }
 
-        // 4. Rendera rum och inredda våningsplan (fönster, belysning)
-        this.renderRooms(ctx);
-
-        // 5. Rendera balkar, pelare och bärverkselement
+        // 4. Rendera stomme först (balkar synliga under montage)
         this.renderMembers(ctx);
+
+        // 5. Fasaderna klär in stommen under/efter invigning
+        this.renderFacades(ctx);
 
         // 6. Rendera noder och anslutningar
         this.renderNodes(ctx);
@@ -1005,37 +1005,202 @@ export class UIManager {
         ctx.stroke();
     }
 
-    renderRooms(ctx) {
-        const rooms = this.game.physics.detectRooms();
-        for (const room of rooms) {
-            const p1 = this.worldToScreenOffset(room.bottomA);
-            const p2 = this.worldToScreenOffset(room.bottomB);
-            const p3 = this.worldToScreenOffset(room.topB);
-            const p4 = this.worldToScreenOffset(room.topA);
+    renderFacades(ctx) {
+        const state = this.game.gameState;
+        if (state === 'build') return; // Ren stomme under bygge
 
-            // Glasfasad med subtil belysning
-            ctx.fillStyle = 'rgba(56, 189, 248, 0.12)';
+        const rooms = this.game.claddingRooms?.length
+            ? this.game.claddingRooms
+            : this.game.physics.getFacadeBays(this.game.resolveFacadeStyle?.() || 'glass');
+        if (!rooms.length) return;
+
+        const globalProgress = state === 'cladding'
+            ? this.game.facadeProgress
+            : 1;
+
+        for (let i = 0; i < rooms.length; i++) {
+            const room = rooms[i];
+            const local = this.facadeBayProgress(i, rooms.length, globalProgress);
+            if (local <= 0.01) continue;
+            this.drawFacadeBay(ctx, room, local, room.style || 'glass');
+        }
+    }
+
+    facadeBayProgress(index, total, globalProgress) {
+        if (globalProgress >= 1) return 1;
+        if (total <= 0) return globalProgress;
+        const start = index / (total + 0.35);
+        const end = (index + 1) / (total + 0.35);
+        return Math.max(0, Math.min(1, (globalProgress - start) / Math.max(0.08, end - start)));
+    }
+
+    drawFacadeBay(ctx, room, progress, style) {
+        const z = this.zoom;
+        const x1 = room.leftX * z;
+        const x2 = room.rightX * z;
+        const y1 = -room.bottomY * z;
+        const y2 = -room.topY * z;
+        const w = x2 - x1;
+        const h = y1 - y2;
+        if (w < 2 || h < 2) return;
+
+        // Montering: paneler växer uppåt från bjälklaget
+        const mountH = h * progress;
+        const clipTop = y1 - mountH;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x1, clipTop, w, mountH);
+        ctx.clip();
+
+        const palette = this.facadePalette(style);
+
+        // Huvudfasadytan
+        const wallGrad = ctx.createLinearGradient(x1, y2, x2, y1);
+        wallGrad.addColorStop(0, palette.wallA);
+        wallGrad.addColorStop(1, palette.wallB);
+        ctx.fillStyle = wallGrad;
+        ctx.fillRect(x1, y2, w, h);
+
+        // Materialtextur
+        if (style === 'brick') {
+            this.drawBrickPattern(ctx, x1, y2, w, h, palette);
+        } else if (style === 'wood') {
+            this.drawWoodCladding(ctx, x1, y2, w, h, palette);
+        }
+
+        // Fönsterband
+        const insetX = Math.max(4, w * 0.12);
+        const insetY = Math.max(4, h * 0.18);
+        const winX = x1 + insetX;
+        const winY = y2 + insetY;
+        const winW = w - insetX * 2;
+        const winH = h - insetY * 2;
+
+        if (winW > 6 && winH > 6) {
+            const glass = ctx.createLinearGradient(winX, winY, winX + winW, winY + winH);
+            glass.addColorStop(0, palette.glassA);
+            glass.addColorStop(0.55, palette.glassB);
+            glass.addColorStop(1, palette.glassC);
+            ctx.fillStyle = glass;
+            ctx.fillRect(winX, winY, winW, winH);
+
+            ctx.strokeStyle = palette.mullion;
+            ctx.lineWidth = Math.max(1.5, z * 0.06);
+            ctx.strokeRect(winX, winY, winW, winH);
+
+            // Sprossar / fönsterposter
+            const panes = style === 'curtain' ? 3 : 2;
             ctx.beginPath();
-            ctx.moveTo(p1.x, p1.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.lineTo(p3.x, p3.y);
-            ctx.lineTo(p4.x, p4.y);
-            ctx.closePath();
-            ctx.fill();
-
-            // Fönsterposter
-            ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
-            ctx.lineWidth = 1;
+            for (let p = 1; p < panes; p++) {
+                const px = winX + (winW * p) / panes;
+                ctx.moveTo(px, winY);
+                ctx.lineTo(px, winY + winH);
+            }
+            ctx.moveTo(winX, winY + winH * 0.45);
+            ctx.lineTo(winX + winW, winY + winH * 0.45);
             ctx.stroke();
 
-            // Varm rumsbelysning i fönstren
-            const midX = (p1.x + p2.x + p3.x + p4.x) / 4;
-            const midY = (p1.y + p2.y + p3.y + p4.y) / 4;
-            ctx.fillStyle = 'rgba(253, 230, 138, 0.25)';
-            ctx.beginPath();
-            ctx.arc(midX, midY, 6, 0, Math.PI * 2);
-            ctx.fill();
+            // Inomhusljus
+            ctx.fillStyle = `rgba(253, 230, 138, ${0.18 + 0.22 * progress})`;
+            ctx.fillRect(winX + winW * 0.15, winY + winH * 0.2, winW * 0.28, winH * 0.22);
         }
+
+        // Yttre karm / panelram
+        ctx.strokeStyle = palette.frame;
+        ctx.lineWidth = Math.max(2, z * 0.08);
+        ctx.strokeRect(x1 + 1, y2 + 1, w - 2, h - 2);
+
+        // Montageglans under pågående montering – tydlig ledkant som rör sig uppåt
+        if (progress < 0.999) {
+            const edgeH = Math.max(4, z * 0.22);
+            const gloss = ctx.createLinearGradient(x1, clipTop, x1, clipTop + edgeH * 3);
+            gloss.addColorStop(0, 'rgba(255, 255, 255, 0.55)');
+            gloss.addColorStop(0.35, 'rgba(253, 224, 71, 0.35)');
+            gloss.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = gloss;
+            ctx.fillRect(x1, clipTop, w, edgeH * 3);
+        }
+
+        ctx.restore();
+    }
+
+    facadePalette(style) {
+        if (style === 'brick') {
+            return {
+                wallA: 'rgba(146, 64, 14, 0.92)',
+                wallB: 'rgba(120, 53, 15, 0.95)',
+                glassA: 'rgba(125, 211, 252, 0.35)',
+                glassB: 'rgba(56, 189, 248, 0.22)',
+                glassC: 'rgba(14, 116, 144, 0.28)',
+                mullion: 'rgba(69, 26, 3, 0.9)',
+                frame: 'rgba(69, 26, 3, 0.95)'
+            };
+        }
+        if (style === 'wood') {
+            return {
+                wallA: 'rgba(180, 83, 9, 0.9)',
+                wallB: 'rgba(146, 64, 14, 0.92)',
+                glassA: 'rgba(186, 230, 253, 0.4)',
+                glassB: 'rgba(125, 211, 252, 0.28)',
+                glassC: 'rgba(14, 116, 144, 0.25)',
+                mullion: 'rgba(120, 53, 15, 0.95)',
+                frame: 'rgba(69, 26, 3, 0.9)'
+            };
+        }
+        if (style === 'curtain') {
+            return {
+                wallA: 'rgba(30, 41, 59, 0.88)',
+                wallB: 'rgba(51, 65, 85, 0.9)',
+                glassA: 'rgba(56, 189, 248, 0.45)',
+                glassB: 'rgba(14, 165, 233, 0.28)',
+                glassC: 'rgba(12, 74, 110, 0.4)',
+                mullion: 'rgba(226, 232, 240, 0.55)',
+                frame: 'rgba(148, 163, 184, 0.85)'
+            };
+        }
+        return {
+            wallA: 'rgba(71, 85, 105, 0.85)',
+            wallB: 'rgba(51, 65, 85, 0.9)',
+            glassA: 'rgba(125, 211, 252, 0.42)',
+            glassB: 'rgba(56, 189, 248, 0.25)',
+            glassC: 'rgba(8, 47, 73, 0.35)',
+            mullion: 'rgba(226, 232, 240, 0.5)',
+            frame: 'rgba(148, 163, 184, 0.8)'
+        };
+    }
+
+    drawBrickPattern(ctx, x, y, w, h, palette) {
+        ctx.strokeStyle = 'rgba(69, 26, 3, 0.35)';
+        ctx.lineWidth = 1;
+        const brickH = Math.max(4, h / 8);
+        const brickW = brickH * 2.2;
+        ctx.beginPath();
+        for (let row = 0; row < h / brickH; row++) {
+            const oy = y + row * brickH;
+            const offset = row % 2 === 0 ? 0 : brickW * 0.5;
+            ctx.moveTo(x, oy);
+            ctx.lineTo(x + w, oy);
+            for (let col = -1; col < w / brickW + 1; col++) {
+                const ox = x + offset + col * brickW;
+                ctx.moveTo(ox, oy);
+                ctx.lineTo(ox, oy + brickH);
+            }
+        }
+        ctx.stroke();
+    }
+
+    drawWoodCladding(ctx, x, y, w, h, palette) {
+        ctx.strokeStyle = 'rgba(69, 26, 3, 0.28)';
+        ctx.lineWidth = 1;
+        const board = Math.max(5, h / 7);
+        ctx.beginPath();
+        for (let i = 1; i < h / board; i++) {
+            const oy = y + i * board;
+            ctx.moveTo(x, oy);
+            ctx.lineTo(x + w, oy);
+        }
+        ctx.stroke();
     }
 
     worldToScreenOffset(node) {

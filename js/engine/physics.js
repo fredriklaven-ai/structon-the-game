@@ -3,7 +3,7 @@
  * Beräknar spänningar, deformationer, knäckning, markinteraktion och brott.
  */
 
-import { MATERIALS, SOIL_TYPES } from './materials.js';
+import { MATERIALS, getSoil } from './materials.js';
 
 export class PhysicsEngine {
     constructor() {
@@ -409,10 +409,12 @@ export class PhysicsEngine {
         const terrain = this.terrain;
         if (!terrain) {
             if (n.y <= 0) {
-                const soil = n.soilType ? SOIL_TYPES[n.soilType] : SOIL_TYPES.stiff_soil;
+                const soil = n.soilType ? getSoil(n.soilType) : getSoil('moraine');
                 const penetration = -n.y;
                 const kGround = 450000 * (soil ? soil.stiffness : 1.0);
-                const fNormal = penetration * kGround;
+                // Extra sättning i lös/blöt lera
+                const settleDamp = 1 - Math.min(0.55, (soil?.settlementRate || 0) * 0.8);
+                const fNormal = penetration * kGround * settleDamp;
                 n.fy += fNormal;
                 n.fx -= n.vx * (fNormal * 0.35 + 200);
                 n.vy *= 0.7;
@@ -451,11 +453,16 @@ export class PhysicsEngine {
             const penetration = support - n.y;
             const soil = terrain.soilAt(n.x, support - 0.05);
             const kGround = 450000 * (soil ? soil.stiffness : 1.0);
-            const fNormal = penetration * kGround;
+            const settleDamp = 1 - Math.min(0.55, (soil?.settlementRate || 0) * 0.8);
+            const fNormal = penetration * kGround * settleDamp;
             n.fy += fNormal;
             n.fx -= n.vx * (fNormal * 0.35 + 200);
             n.vy *= 0.7;
             n.soilType = soil ? soil.id : n.soilType;
+            // Lös/blöt lera utan bergförankring: långsam vertikal sättning under last
+            if (soil?.requiresPiling && !n.isBedrockPinned && !n.fixed) {
+                n.fy -= n.mass * 9.81 * soil.settlementRate * 0.15;
+            }
         }
     }
 

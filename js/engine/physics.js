@@ -136,10 +136,29 @@ export class PhysicsEngine {
 
         if (length < 0.2) return null; // För kort
 
+        // Pelare: kräver huvudsakligen vertikal riktning
+        if (material.isColumn) {
+            const slopeFromVertical = Math.abs(Math.atan2(Math.abs(dx), Math.abs(dy))) * 180 / Math.PI;
+            const maxSlope = material.maxSlopeDeg ?? 15;
+            if (slopeFromVertical > maxSlope) {
+                return { error: 'column_slope', slopeFromVertical, maxSlope, material };
+            }
+        }
+
         // Beräkna tvärsnittsarea (m²) och tröghetsmoment (m⁴) baserat på materialets tjocklek
         const thicknessMeters = material.thickness / 100; // t.ex. 0.14 m
         const area = thicknessMeters * thicknessMeters;
         const momentOfInertia = (thicknessMeters * Math.pow(thicknessMeters, 3)) / 12; // I = b*h³/12
+
+        // Förspänning: förkorta vilolängden så kabeln drar ihop ändarna
+        let restLength = length;
+        let prestressForce = 0;
+        if (material.isPretension && material.prestressForce > 0) {
+            prestressForce = material.prestressForce;
+            const kPhysical = (material.youngsModulus * area) / Math.max(length, 0.2);
+            const shorten = Math.min(length * 0.02, prestressForce / Math.max(kPhysical, 1));
+            restLength = Math.max(0.15, length - shorten);
+        }
 
         const id = 'mem_' + Math.random().toString(36).substr(2, 9);
         const member = {
@@ -148,7 +167,7 @@ export class PhysicsEngine {
             nodeB,
             material,
             materialKey,
-            restLength: length,
+            restLength,
             currentLength: length,
             area,
             momentOfInertia,
@@ -160,7 +179,9 @@ export class PhysicsEngine {
             failureType: null, // 'tension', 'compression', 'buckling', 'shear'
             angularMomentum: 0,
             cost: Math.round(length * material.costPerMeter),
-            weight: length * area * material.density
+            weight: length * area * material.density,
+            prestressForce,
+            shaftCapacity: 0
         };
 
         this.members.push(member);
@@ -168,8 +189,7 @@ export class PhysicsEngine {
         nodeB.connectedMembers.push(member);
 
         if (material.isPile) {
-            this._tryPinPileToBedrock(nodeA);
-            this._tryPinPileToBedrock(nodeB);
+            this._setupPileAnchorage(member);
         }
 
         this.updateNodeMasses();
@@ -182,16 +202,117 @@ export class PhysicsEngine {
         return y <= this.terrain.surfaceY(x) + 0.3;
     }
 
+    _setupPileAnchorage(member) {
+        const mat = member.material;
+        if (mat.isFrictionPile) {
+            this._refreshFrictionPileCapacity(member);
+            return;
+        }
+        // Spetsbärande: förankra tippen i/till berg
+        this._tryPinEndBearingTip(member.nodeA, mat);
+        this._tryPinEndBearingTip(member.nodeB, mat);
+    }
+
     _tryPinPileToBedrock(node) {
-        if (!this.terrain || !node) return;
-        if (this.terrain.isSolidRockForPin(node.x, node.y)) {
+        // Bakåtkompatibel hjälpare (äldre tester)
+        this._tryPinEndBearingTip(node, MATERIALS.pile_driven || MATERIALS.pile);
+    }
+
+    _tryPinEndBearingTip(node, material) {
+        if (!this.terrain || !node || !material) return;
+        if (material.isFrictionPile) return;
+
+        const rockY = this.terrain.bedrockY(node.x);
+        const method = material.pileMethod || 'driven';
+        let ok = false;
+
+        if (method === 'bored') {
+            // Borrad: tippen ska gå ned i berget
+            ok = node.y <= rockY - 0.2 && this.terrain.isSolidRockForPin(node.x, node.y);
+        } else {
+            // Slagen: tippen ska nå bergytan (eller strax under)
+            const nearRockSurface = node.y <= rockY + 0.25 && node.y >= rockY - 0.85;
+            ok = (nearRockSurface && this.terrain.classify(node.x, Math.min(node.y, rockY - 0.05)) === 'rock')
+                || this.terrain.isSolidRockForPin(node.x, node.y);
+        }
+
+        if (ok) {
             node.fixed = true;
             node.initialFixed = true;
             node.isBedrockPinned = true;
             node.initialBedrockPinned = true;
             node.soilType = 'bedrock';
             node.isGroundAnchor = true;
+            node.pileTipBearing = true;
         }
+    }
+
+    _refreshFrictionPileCapacity(member) {
+        if (!member?.material?.isFrictionPile) {
+            member.shaftCapacity = 0;
+            return;
+        }
+        const friction = member.material.shaftFrictionPerMeter || 40000;
+        const embed = this._pileEmbedmentLength(member);
+        member.shaftCapacity = embed * friction;
+        // Förstärk jordkontakt på noder i jord
+        for (const n of [member.nodeA, member.nodeB]) {
+            if (n.isBedrockPinned) continue;
+            n.frictionPileBoost = Math.max(n.frictionPileBoost || 0, 1.8 + embed * 0.15);
+        }
+    }
+
+    _pileEmbedmentLength(member) {
+        const terrain = this.terrain;
+        const nA = member.nodeA;
+        const nB = member.nodeB;
+        const len = Math.hypot(nB.x - nA.x, nB.y - nA.y);
+        if (len < 0.05) return 0;
+        const samples = 12;
+        let embed = 0;
+        for (let i = 0; i < samples; i++) {
+            const t0 = i / samples;
+            const t1 = (i + 1) / samples;
+            const x = nA.x + (nB.x - nA.x) * ((t0 + t1) / 2);
+            const y = nA.y + (nB.y - nA.y) * ((t0 + t1) / 2);
+            const ds = len / samples;
+            if (!terrain) {
+                if (y < 0) embed += ds;
+                continue;
+            }
+            const surf = terrain.surfaceY(x);
+            const cls = terrain.classify(x, y);
+            if (y < surf - 0.05 && cls !== 'tunnel' && cls !== 'crack' && cls !== 'air') {
+                embed += ds;
+            }
+        }
+        return embed;
+    }
+
+    /**
+     * Friktionspåle: mantelskjuvning motverkar sjunkning under tryck.
+     */
+    applyFrictionPileForces(member) {
+        if (!member.material?.isFrictionPile || member.isBroken) return;
+        this._refreshFrictionPileCapacity(member);
+        const capacity = member.shaftCapacity || 0;
+        if (capacity <= 0) return;
+
+        // Om pålen är i tryck (ändar trycks ihop / tippen sjunker), lyft med manteln
+        const nA = member.nodeA;
+        const nB = member.nodeB;
+        const tip = nA.y <= nB.y ? nA : nB;
+        const head = tip === nA ? nB : nA;
+        if (tip.fixed) return;
+
+        const compression = Math.max(0, -member.force);
+        const resist = Math.min(capacity, compression + Math.max(0, -tip.fy));
+        if (resist <= 0) return;
+
+        // Fördela mantellast längs pålen: mer till den lägre noden
+        tip.fy += resist * 0.72;
+        if (!head.fixed) head.fy += resist * 0.28;
+        tip.vy *= 0.85;
     }
 
     removeMember(member) {
@@ -292,7 +413,7 @@ export class PhysicsEngine {
                 // Fysisk kritisk dämpning c = 2 * zeta * sqrt(k * m)
                 const cDamping = 0.06 * 2 * Math.sqrt(kSim * Math.max(25, (nA.mass + nB.mass) * 0.5));
                 const dampingForce = Math.max(-10000, Math.min(10000, relVelNormal * cDamping));
-                const totalForce = normalForce + dampingForce;
+                let totalForce = normalForce + dampingForce;
 
                 m.force = normalForce; // Kraft i Newton
                 const absForce = Math.abs(normalForce);
@@ -307,7 +428,23 @@ export class PhysicsEngine {
                 let allowableStress = 0;
                 let isCritical = false;
 
-                if (m.material.isStrut) {
+                if (m.material.isTensionOnly) {
+                    // Dragband / spännkabel: enbart drag – tryck ger slack
+                    if (normalForce <= 0) {
+                        normalForce = 0;
+                        totalForce = Math.max(0, dampingForce);
+                        m.force = 0;
+                        m.stress = 0;
+                        m.stressRatio = 0;
+                    } else {
+                        allowableStress = m.material.maxTension;
+                        m.stressRatio = m.stress / Math.max(allowableStress, 1);
+                        if (m.stress > allowableStress) {
+                            m.failureType = 'tension';
+                            isCritical = true;
+                        }
+                    }
+                } else if (m.material.isStrut) {
                     // Strävor (Kryssförband / dragstag)
                     if (normalForce > 0) {
                         // Dragspänning
@@ -321,9 +458,10 @@ export class PhysicsEngine {
                         // Vid tryck slaknar en slank sträva elastiskt utan att explodera/brista
                         m.stressRatio = Math.min(0.40, absForce / (eulerBucklingForce + 1));
                         normalForce = Math.max(-eulerBucklingForce * 0.35, normalForce);
+                        totalForce = normalForce + dampingForce;
                     }
                 } else {
-                    // Vanliga bärverkselement (Pelare, Balkar, Plattor)
+                    // Vanliga bärverkselement (Pelare, Balkar, Plattor, Pålar)
                     if (normalForce > 0) {
                         // Dragspänning (Tension)
                         allowableStress = m.material.maxTension;
@@ -366,6 +504,10 @@ export class PhysicsEngine {
                 if (!nB.fixed) {
                     nB.fx -= fx;
                     nB.fy -= fy;
+                }
+
+                if (m.material.isFrictionPile) {
+                    this.applyFrictionPileForces(m);
                 }
             }
 
@@ -411,10 +553,16 @@ export class PhysicsEngine {
             if (n.y <= 0) {
                 const soil = n.soilType ? getSoil(n.soilType) : getSoil('moraine');
                 const penetration = -n.y;
+<<<<<<< HEAD
                 const kGround = 450000 * (soil ? soil.stiffness : 1.0);
                 // Extra sättning i lös/blöt lera
                 const settleDamp = 1 - Math.min(0.55, (soil?.settlementRate || 0) * 0.8);
                 const fNormal = penetration * kGround * settleDamp;
+=======
+                const boost = n.frictionPileBoost || 1;
+                const kGround = 450000 * (soil ? soil.stiffness : 1.0) * boost;
+                const fNormal = penetration * kGround;
+>>>>>>> 5803683 (Lägg till pelare, dragband, spännkabel och påltyper)
                 n.fy += fNormal;
                 n.fx -= n.vx * (fNormal * 0.35 + 200);
                 n.vy *= 0.7;
@@ -452,9 +600,15 @@ export class PhysicsEngine {
         if (n.y < support) {
             const penetration = support - n.y;
             const soil = terrain.soilAt(n.x, support - 0.05);
+<<<<<<< HEAD
             const kGround = 450000 * (soil ? soil.stiffness : 1.0);
             const settleDamp = 1 - Math.min(0.55, (soil?.settlementRate || 0) * 0.8);
             const fNormal = penetration * kGround * settleDamp;
+=======
+            const boost = n.frictionPileBoost || 1;
+            const kGround = 450000 * (soil ? soil.stiffness : 1.0) * boost;
+            const fNormal = penetration * kGround;
+>>>>>>> 5803683 (Lägg till pelare, dragband, spännkabel och påltyper)
             n.fy += fNormal;
             n.fx -= n.vx * (fNormal * 0.35 + 200);
             n.vy *= 0.7;
@@ -648,7 +802,11 @@ export class PhysicsEngine {
     // Upptäcker slutna 4-sidiga våningsplan (rum) för rendering av fönster, belysning och inredning
     detectRooms() {
         const rooms = [];
-        const activeMembers = this.members.filter(m => !m.isBroken && !m.material.isStrut);
+        const activeMembers = this.members.filter(m => {
+            if (m.isBroken) return false;
+            const mat = m.material;
+            return !mat.isStrut && !mat.isTensionOnly && !mat.isPile;
+        });
         // Vinkelbaserat: tål kuperad mark och dragriktning vid placering
         const horiz = activeMembers.filter(m => {
             const a = this._memberAngleDeg(m);
@@ -719,7 +877,11 @@ export class PhysicsEngine {
      * slutna fack inte detekteras (sneda bjälklag / ofullständig snäppning).
      */
     detectEnvelopeBays() {
-        const active = this.members.filter(m => !m.isBroken && !m.material.isStrut);
+        const active = this.members.filter(m => {
+            if (m.isBroken) return false;
+            const mat = m.material;
+            return !mat.isStrut && !mat.isTensionOnly && !mat.isPile;
+        });
         if (active.length < 3) return [];
 
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;

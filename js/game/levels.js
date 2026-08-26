@@ -17,7 +17,7 @@ export const LEVELS = [
         budget: 320000,
         targetHeight: 6.5,   // meter
         minFloors: 2,
-        allowedMaterials: ['concrete_cast', 'wood', 'strut_wood'],
+        allowedMaterials: ['concrete_cast', 'wood', 'strut_wood', 'column_wood'],
         ground: {
             seed: 11,
             leftX: -12,
@@ -69,7 +69,7 @@ export const LEVELS = [
         budget: 950000,
         targetHeight: 13.5,
         minFloors: 4,
-        allowedMaterials: ['concrete_cast', 'concrete_reinforced', 'brick', 'wood', 'strut_wood', 'strut_steel'],
+        allowedMaterials: ['concrete_cast', 'concrete_reinforced', 'brick', 'wood', 'strut_wood', 'strut_steel', 'column_rc', 'column_wood', 'tension_rod'],
         ground: {
             seed: 22,
             leftX: -16,
@@ -124,7 +124,7 @@ export const LEVELS = [
         budget: 2900000,
         targetHeight: 33.0,
         minFloors: 9,
-        allowedMaterials: ['concrete_cast', 'concrete_reinforced', 'steel', 'strut_steel', 'wood'],
+        allowedMaterials: ['concrete_cast', 'concrete_reinforced', 'steel', 'strut_steel', 'wood', 'column_rc', 'column_steel', 'tension_rod', 'pretension_cable'],
         ground: {
             seed: 33,
             leftX: -18,
@@ -182,7 +182,7 @@ export const LEVELS = [
         budget: 8200000,
         targetHeight: 68.0,
         minFloors: 18,
-        allowedMaterials: ['concrete_cast', 'concrete_reinforced', 'steel', 'strut_steel', 'wood', 'brick', 'pile'],
+        allowedMaterials: ['concrete_cast', 'concrete_reinforced', 'steel', 'strut_steel', 'wood', 'brick', 'column_rc', 'column_steel', 'tension_rod', 'pretension_cable', 'pile_friction', 'pile_driven', 'pile_bored', 'pile'],
         ground: {
             seed: 44,
             leftX: -22,
@@ -251,7 +251,7 @@ export const LEVELS = [
         targetHeight: 18.0,
         targetSpan: 36.0,
         minFloors: 3,
-        allowedMaterials: ['concrete_cast', 'concrete_reinforced', 'steel', 'strut_steel', 'wood', 'pile'],
+        allowedMaterials: ['concrete_cast', 'concrete_reinforced', 'steel', 'strut_steel', 'wood', 'column_steel', 'tension_rod', 'pretension_cable', 'pile_friction', 'pile_driven', 'pile_bored', 'pile'],
         ground: {
             seed: 55,
             leftX: -28,
@@ -326,7 +326,7 @@ export const LEVELS = [
         budget: 30000000,
         targetHeight: 105.0,
         minFloors: 28,
-        allowedMaterials: ['concrete_cast', 'concrete_reinforced', 'steel', 'strut_steel', 'wood', 'brick', 'pile'],
+        allowedMaterials: ['concrete_cast', 'concrete_reinforced', 'steel', 'strut_steel', 'wood', 'brick', 'column_rc', 'column_steel', 'tension_rod', 'pretension_cable', 'pile_friction', 'pile_driven', 'pile_bored', 'pile'],
         ground: {
             seed: 66,
             leftX: -32,
@@ -397,7 +397,13 @@ export const SANDBOX_LEVEL = {
     budget: 999999999,
     targetHeight: 0,
     minFloors: 0,
-    allowedMaterials: ['concrete_cast', 'concrete_reinforced', 'steel', 'strut_steel', 'wood', 'strut_wood', 'brick', 'pile'],
+    allowedMaterials: [
+        'concrete_cast', 'concrete_reinforced', 'steel', 'wood', 'brick',
+        'strut_steel', 'strut_wood',
+        'column_rc', 'column_steel', 'column_wood',
+        'tension_rod', 'pretension_cable',
+        'pile_friction', 'pile_driven', 'pile_bored', 'pile'
+    ],
     ground: {
         seed: 77,
         leftX: -40,

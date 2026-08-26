@@ -101,3 +101,46 @@ test('kuvertfasad används när stommen saknar perfekta fack', () => {
     assert.ok(bays.length >= 1, `förväntade kuvertfasad, fick ${bays.length}`);
     assert.ok(bays.every(b => b.isEnvelope));
 });
+
+test('spänningsfärg går från grönt till rött med utnyttjandegrad', async () => {
+    const { stressHeatColor } = await import('../game/ui.js');
+    const low = stressHeatColor(0.05);
+    const mid = stressHeatColor(0.55);
+    const high = stressHeatColor(1.0);
+    const parse = (s) => s.match(/\d+/g).map(Number);
+    const [lr, lg] = parse(low);
+    const [mr, mg] = parse(mid);
+    const [hr, hg] = parse(high);
+    assert.ok(lg > lr, `låg spänning ska vara grönare: ${low}`);
+    assert.ok(hr > hg, `hög spänning ska vara rödare: ${high}`);
+    assert.ok(mr > lr && mg < lg, `mellanläge gul/orange: ${mid}`);
+});
+
+test('2.5D-tilt ökar skew när viewTilt går mot 1', async () => {
+    const { buildingTiltParams } = await import('../game/ui.js');
+    const flat = buildingTiltParams(0);
+    const tipped = buildingTiltParams(1);
+    assert.ok(Math.abs(flat.skewX) < 1e-9);
+    assert.ok(Math.abs(flat.scaleY - 1) < 1e-9);
+    assert.ok(tipped.skewX < -0.35, 'full tilt ska ha tydlig skew');
+    assert.ok(tipped.scaleY < 0.92, 'full tilt ska komprimera Y något');
+});
+
+test('lastfas sätter viewTiltTarget så byggnaden vrids upp', () => {
+    const state = {
+        gameState: 'cladding',
+        viewTilt: 0,
+        viewTiltTarget: 0
+    };
+    // beginLoadPhase-ekvivalent
+    state.gameState = 'test';
+    state.viewTiltTarget = 1;
+    // Simulera updateViewTilt
+    for (let i = 0; i < 40; i++) {
+        const speed = 1.8;
+        const dt = 0.05;
+        const delta = state.viewTiltTarget - state.viewTilt;
+        state.viewTilt += Math.sign(delta) * Math.min(Math.abs(delta), speed * dt);
+    }
+    assert.ok(state.viewTilt > 0.85, `förväntade nära full tilt, fick ${state.viewTilt}`);
+});

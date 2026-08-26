@@ -659,7 +659,7 @@ export class UIManager {
         // Applicera kameratransformation
         ctx.translate(this.panX, this.panY);
 
-        // 2. Rendera mark, geologiska lager och berggrund
+        // 2. Rendera mark, geologiska lager och berggrund (förblir i 2D)
         this.renderGround(ctx);
 
         // 3. Rendera byggnadsraster (Grid)
@@ -667,14 +667,26 @@ export class UIManager {
             this.renderGrid(ctx);
         }
 
-        // 4. Rendera stomme först (balkar synliga under montage)
-        this.renderMembers(ctx);
+        const tilt = this.game.viewTilt || 0;
+        const loadPhase = this.game.gameState === 'test' || this.game.gameState === 'report';
+        const inLoadView = loadPhase && tilt > 0.01;
 
-        // 5. Fasaderna klär in stommen under/efter invigning
-        this.renderFacades(ctx);
+        ctx.save();
+        if (inLoadView) {
+            this.applyBuildingTilt(ctx, tilt);
+        }
 
-        // 6. Rendera noder och anslutningar
-        this.renderNodes(ctx);
+        if (loadPhase) {
+            // Under laster: först transparenta fasader (med djup), sedan stomme ovanpå
+            this.renderFacades(ctx);
+            this.renderMembers(ctx);
+            this.renderNodes(ctx);
+        } else {
+            // Bygge/montage: stomme synlig under montering, fasader ovanpå
+            this.renderMembers(ctx);
+            this.renderFacades(ctx);
+            this.renderNodes(ctx);
+        }
 
         // 7. Rendera rasmassor och fysikskräp
         this.renderDebris(ctx);
@@ -682,7 +694,9 @@ export class UIManager {
         // 8. Rendera interaktiv byggförhandsgranskning (draglinje)
         this.renderBuildPreview(ctx);
 
-        // 9. Rendera måttstock och höjdindikator (meterlinjal)
+        ctx.restore(); // avsluta tilt
+
+        // 9. Rendera måttstock och höjdindikator (meterlinjal) – utan tilt
         this.renderHeightRuler(ctx);
 
         // 10. Rendera väderpartiklar (regn & vindstråk)
@@ -695,6 +709,49 @@ export class UIManager {
             ctx.fillStyle = `rgba(255, 255, 255, ${this.game.environment.lightningFlash * 0.75})`;
             ctx.fillRect(0, 0, width, height);
         }
+    }
+
+    /**
+     * Byggnadens centrum i zoomad rityta (före pan) – pivot för 2.5D-tilt.
+     */
+    getBuildingPivot() {
+        const nodes = this.game.physics.nodes;
+        if (!nodes.length) return { sx: 0, sy: 0 };
+        let minX = Infinity;
+        let maxX = -Infinity;
+        let minY = Infinity;
+        let maxY = -Infinity;
+        for (const n of nodes) {
+            minX = Math.min(minX, n.x);
+            maxX = Math.max(maxX, n.x);
+            minY = Math.min(minY, n.y);
+            maxY = Math.max(maxY, n.y);
+        }
+        const cx = (minX + maxX) / 2;
+        const cy = (minY + maxY) / 2;
+        return { sx: cx * this.zoom, sy: -cy * this.zoom };
+    }
+
+    /**
+     * Vrid upp byggnaden till en lätt 2.5D/isometrisk vy under lastfasen.
+     * Marken lämnas orörd (anropas innan denna transform).
+     */
+    /**
+     * Vrid upp byggnaden till en lätt 2.5D/isometrisk vy under lastfasen.
+     * Marken lämnas orörd (anropas innan denna transform).
+     */
+    applyBuildingTilt(ctx, tilt = 1) {
+        const t = Math.max(0, Math.min(1, tilt));
+        const pivot = this.getBuildingPivot();
+        const p = buildingTiltParams(t);
+        ctx.translate(pivot.sx, pivot.sy);
+        ctx.transform(p.scaleX, p.skewY, p.skewX, p.scaleY, 0, 0);
+        ctx.translate(-pivot.sx, -pivot.sy);
+    }
+
+    /** Interpolerad spänningsfärg: grön → gul → orange → röd efter utnyttjandegrad. */
+    stressHeatColor(ratio) {
+        return stressHeatColor(ratio);
     }
 
     renderSky(ctx, width, height) {
@@ -1171,18 +1228,55 @@ export class UIManager {
         const h = y1 - y2;
         if (w < 2 || h < 2) return;
 
+        const state = this.game.gameState;
+        const tilt = this.game.viewTilt || 0;
+        const seeThrough = state === 'test' || state === 'report';
+        // Under lastfas: mer transparent; under montage: tät
+        const alphaScale = seeThrough ? 0.42 : 1;
+
         // Montering: paneler växer uppåt från bjälklaget
         const mountH = h * progress;
         const clipTop = y1 - mountH;
 
         ctx.save();
         ctx.beginPath();
-        ctx.rect(x1, clipTop, w, mountH);
+        const depthPad = seeThrough ? Math.max(16, z * 1.1) : 0;
+        ctx.rect(x1 - 2, clipTop - depthPad * 0.5, w + depthPad + 6, mountH + depthPad);
         ctx.clip();
 
-        const palette = this.facadePalette(style);
+        const palette = this.facadePalette(style, alphaScale);
 
-        // Huvudfasadytan
+        // Sidoyta (djup) i 2.5D-vyn – ger känsla av volym
+        if (seeThrough && tilt > 0.08) {
+            const depth = Math.max(10, z * 0.85 * Math.max(tilt, 0.55));
+            const lift = depth * 0.38;
+            ctx.beginPath();
+            ctx.moveTo(x2, y2);
+            ctx.lineTo(x2 + depth, y2 - lift);
+            ctx.lineTo(x2 + depth, y1 - lift);
+            ctx.lineTo(x2, y1);
+            ctx.closePath();
+            ctx.fillStyle = palette.side;
+            ctx.fill();
+            ctx.strokeStyle = palette.frame;
+            ctx.lineWidth = Math.max(1.5, z * 0.05);
+            ctx.stroke();
+
+            // Takyta på översta kanten
+            ctx.beginPath();
+            ctx.moveTo(x1, y2);
+            ctx.lineTo(x2, y2);
+            ctx.lineTo(x2 + depth, y2 - lift);
+            ctx.lineTo(x1 + depth, y2 - lift);
+            ctx.closePath();
+            ctx.fillStyle = palette.roof;
+            ctx.fill();
+            ctx.strokeStyle = palette.frame;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        // Huvudfasadytan (genomskinlig under laster så stomspänning syns)
         const wallGrad = ctx.createLinearGradient(x1, y2, x2, y1);
         wallGrad.addColorStop(0, palette.wallA);
         wallGrad.addColorStop(1, palette.wallB);
@@ -1228,8 +1322,9 @@ export class UIManager {
             ctx.lineTo(winX + winW, winY + winH * 0.45);
             ctx.stroke();
 
-            // Inomhusljus
-            ctx.fillStyle = `rgba(253, 230, 138, ${0.18 + 0.22 * progress})`;
+            // Inomhusljus – dämpat under genomlysning
+            const glow = seeThrough ? 0.08 : 0.18 + 0.22 * progress;
+            ctx.fillStyle = `rgba(253, 230, 138, ${glow})`;
             ctx.fillRect(winX + winW * 0.15, winY + winH * 0.2, winW * 0.28, winH * 0.22);
         }
 
@@ -1252,48 +1347,62 @@ export class UIManager {
         ctx.restore();
     }
 
-    facadePalette(style) {
+    facadePalette(style, alphaScale = 1) {
+        const a = (base, mul = 1) => {
+            const m = Math.max(0.08, Math.min(1, base * alphaScale * mul));
+            return m;
+        };
+        const rgba = (r, g, b, base, mul = 1) => `rgba(${r}, ${g}, ${b}, ${a(base, mul)})`;
+
         if (style === 'brick') {
             return {
-                wallA: 'rgba(146, 64, 14, 0.92)',
-                wallB: 'rgba(120, 53, 15, 0.95)',
-                glassA: 'rgba(125, 211, 252, 0.35)',
-                glassB: 'rgba(56, 189, 248, 0.22)',
-                glassC: 'rgba(14, 116, 144, 0.28)',
-                mullion: 'rgba(69, 26, 3, 0.9)',
-                frame: 'rgba(69, 26, 3, 0.95)'
+                wallA: rgba(146, 64, 14, 0.92),
+                wallB: rgba(120, 53, 15, 0.95),
+                glassA: rgba(125, 211, 252, 0.35),
+                glassB: rgba(56, 189, 248, 0.22),
+                glassC: rgba(14, 116, 144, 0.28),
+                mullion: rgba(69, 26, 3, 0.9),
+                frame: rgba(69, 26, 3, 0.95),
+                side: rgba(88, 40, 12, 0.55),
+                roof: rgba(120, 53, 15, 0.5)
             };
         }
         if (style === 'wood') {
             return {
-                wallA: 'rgba(180, 83, 9, 0.9)',
-                wallB: 'rgba(146, 64, 14, 0.92)',
-                glassA: 'rgba(186, 230, 253, 0.4)',
-                glassB: 'rgba(125, 211, 252, 0.28)',
-                glassC: 'rgba(14, 116, 144, 0.25)',
-                mullion: 'rgba(120, 53, 15, 0.95)',
-                frame: 'rgba(69, 26, 3, 0.9)'
+                wallA: rgba(180, 83, 9, 0.9),
+                wallB: rgba(146, 64, 14, 0.92),
+                glassA: rgba(186, 230, 253, 0.4),
+                glassB: rgba(125, 211, 252, 0.28),
+                glassC: rgba(14, 116, 144, 0.25),
+                mullion: rgba(120, 53, 15, 0.95),
+                frame: rgba(69, 26, 3, 0.9),
+                side: rgba(120, 53, 15, 0.5),
+                roof: rgba(146, 64, 14, 0.45)
             };
         }
         if (style === 'curtain') {
             return {
-                wallA: 'rgba(30, 41, 59, 0.88)',
-                wallB: 'rgba(51, 65, 85, 0.9)',
-                glassA: 'rgba(56, 189, 248, 0.45)',
-                glassB: 'rgba(14, 165, 233, 0.28)',
-                glassC: 'rgba(12, 74, 110, 0.4)',
-                mullion: 'rgba(226, 232, 240, 0.55)',
-                frame: 'rgba(148, 163, 184, 0.85)'
+                wallA: rgba(30, 41, 59, 0.88),
+                wallB: rgba(51, 65, 85, 0.9),
+                glassA: rgba(56, 189, 248, 0.45),
+                glassB: rgba(14, 165, 233, 0.28),
+                glassC: rgba(12, 74, 110, 0.4),
+                mullion: rgba(226, 232, 240, 0.55),
+                frame: rgba(148, 163, 184, 0.85),
+                side: rgba(15, 23, 42, 0.55),
+                roof: rgba(51, 65, 85, 0.5)
             };
         }
         return {
-            wallA: 'rgba(71, 85, 105, 0.85)',
-            wallB: 'rgba(51, 65, 85, 0.9)',
-            glassA: 'rgba(125, 211, 252, 0.42)',
-            glassB: 'rgba(56, 189, 248, 0.25)',
-            glassC: 'rgba(8, 47, 73, 0.35)',
-            mullion: 'rgba(226, 232, 240, 0.5)',
-            frame: 'rgba(148, 163, 184, 0.8)'
+            wallA: rgba(71, 85, 105, 0.85),
+            wallB: rgba(51, 65, 85, 0.9),
+            glassA: rgba(125, 211, 252, 0.42),
+            glassB: rgba(56, 189, 248, 0.25),
+            glassC: rgba(8, 47, 73, 0.35),
+            mullion: rgba(226, 232, 240, 0.5),
+            frame: rgba(148, 163, 184, 0.8),
+            side: rgba(30, 41, 59, 0.5),
+            roof: rgba(51, 65, 85, 0.45)
         };
     }
 
@@ -1358,21 +1467,12 @@ export class UIManager {
             let strokeColor = mat.color;
             let lineWidth = Math.max(3, (mat.thickness / 100) * this.zoom);
 
-            // Spänningskarta (Heatmap)
-            if (this.isHeatmapActive && (this.game.gameState === 'simulate' || this.game.gameState === 'test' || m.stressRatio > 0.3)) {
+            // Spänningskarta (Heatmap) – grön→röd efter utnyttjandegrad, synlig genom transparent fasad
+            if (this.isHeatmapActive && (this.game.gameState === 'simulate' || this.game.gameState === 'test' || this.game.gameState === 'report' || m.stressRatio > 0.3)) {
                 const ratio = m.stressRatio;
+                strokeColor = this.stressHeatColor(ratio);
                 if (ratio > 0.92) {
-                    strokeColor = '#EF4444'; // Röd (Kritisk)
-                    // Pulsera vid extrem överbelastning
                     lineWidth += Math.sin(Date.now() * 0.015) * 2;
-                } else if (ratio > 0.75) {
-                    strokeColor = '#F97316'; // Orange
-                } else if (ratio > 0.50) {
-                    strokeColor = '#EAB308'; // Gul
-                } else if (ratio > 0.25) {
-                    strokeColor = '#22C55E'; // Grön
-                } else {
-                    strokeColor = '#06B6D4'; // Cyan / Låg spänning
                 }
             }
 
@@ -1607,4 +1707,44 @@ export class UIManager {
             }
         }
     }
+}
+
+/** Interpolerad spänningsfärg: grön → gul → orange → röd efter utnyttjandegrad. */
+export function stressHeatColor(ratio) {
+    const r = Math.max(0, Math.min(1.15, ratio));
+    const stops = [
+        { t: 0, c: [34, 197, 94] },
+        { t: 0.35, c: [132, 204, 22] },
+        { t: 0.55, c: [234, 179, 8] },
+        { t: 0.78, c: [249, 115, 22] },
+        { t: 1.0, c: [239, 68, 68] }
+    ];
+    let a = stops[0];
+    let b = stops[stops.length - 1];
+    for (let i = 0; i < stops.length - 1; i++) {
+        if (r >= stops[i].t && r <= stops[i + 1].t) {
+            a = stops[i];
+            b = stops[i + 1];
+            break;
+        }
+        if (r > stops[i + 1].t) {
+            a = stops[i + 1];
+            b = stops[i + 1];
+        }
+    }
+    const span = Math.max(1e-6, b.t - a.t);
+    const u = Math.max(0, Math.min(1, (r - a.t) / span));
+    const rgb = a.c.map((v, i) => Math.round(v + (b.c[i] - v) * u));
+    return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+}
+
+/** Parametrar för 2.5D-tilt (skew/scale) – tydlig men läsbar tipp. */
+export function buildingTiltParams(tilt = 1) {
+    const t = Math.max(0, Math.min(1, tilt));
+    return {
+        skewX: -0.55 * t,
+        skewY: 0.1 * t,
+        scaleY: 1 - 0.16 * t,
+        scaleX: 1 + 0.08 * t
+    };
 }

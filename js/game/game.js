@@ -20,10 +20,11 @@ export class StructonGame {
         this.ui = new UIManager(this, this.canvas);
 
         // Speltillstånd
-        this.gameState = 'build'; // 'build', 'cladding', 'test', 'simulate', 'report'
+        this.gameState = 'build'; // 'build', 'oath', 'cladding', 'test', 'simulate', 'report'
         this.currentLevelIndex = 0;
         this.currentLevel = null;
         this.isSandbox = false;
+        this.hammurabiStamped = false;
 
         // Fasadmontage före lastpåföring
         this.facadeProgress = 0;
@@ -104,8 +105,15 @@ export class StructonGame {
         this.claddingHoldTimer = 0;
         this.claddingRooms = [];
         this.lastFacadeMountIndex = -1;
+<<<<<<< HEAD
         this.viewTilt = 0;
         this.viewTiltTarget = 0;
+=======
+        this.hammurabiStamped = false;
+        this.isPaused = false;
+        const hammurabiModal = document.getElementById('hammurabi-modal');
+        if (hammurabiModal) hammurabiModal.style.display = 'none';
+>>>>>>> d6117e9 (Kräv Hammurabi-intyg med stämpel innan invigningssimulation)
         this.physics.reset();
         this.environment.reset();
         this.audio.updateWind(0);
@@ -198,6 +206,134 @@ export class StructonGame {
         this.audio.resume();
         this.audio.playClick();
 
+        // Myndighetsintyg enligt Hammurabi måste stämplas innan simuleringen
+        this.showHammurabiOath();
+    }
+
+    showHammurabiOath() {
+        this.gameState = 'oath';
+        this.hammurabiStamped = false;
+        this.isPaused = true;
+
+        const modal = document.getElementById('hammurabi-modal');
+        if (!modal) {
+            this.beginCladdingPhase();
+            return;
+        }
+
+        const lvl = this.currentLevel;
+        const height = this.physics.stats.buildingHeight;
+        const cost = this.physics.stats.totalCost;
+
+        modal.innerHTML = `
+            <div class="modal-content hammurabi-scroll" role="dialog" aria-labelledby="hammurabi-title">
+                <div class="hammurabi-crest">𒀭</div>
+                <header class="hammurabi-header">
+                    <p class="hammurabi-eyebrow">Till myndigheterna</p>
+                    <h2 id="hammurabi-title">Intyg enligt Hammurabis byggregler</h2>
+                    <p class="hammurabi-project">${lvl?.name || 'Byggprojekt'} · ${height} m · ${cost.toLocaleString('sv-SE')} kr</p>
+                </header>
+
+                <section class="hammurabi-body">
+                    <p class="hammurabi-lead">
+                        Innan invigningen får fortsätta ska byggherren intyga att konstruktionen
+                        uppfyller Hammurabis byggregler.
+                    </p>
+                    <blockquote class="hammurabi-law">
+                        <span class="hammurabi-law-label">Byggregeln</span>
+                        <p>
+                            Om huset rasar och någon omkommer, ska även du som signerar
+                            offra ditt eget liv.
+                        </p>
+                    </blockquote>
+                    <p class="hammurabi-affirm">
+                        Jag intygar härmed att byggnaden är uppförd enligt dessa regler
+                        och att den kommer att hålla.
+                    </p>
+                </section>
+
+                <section class="hammurabi-stamp-section">
+                    <p class="hammurabi-stamp-hint" id="hammurabi-stamp-hint">
+                        Sätt din stämpel längst ned på dokumentet
+                    </p>
+                    <div class="hammurabi-stamp-row">
+                        <button type="button" class="hammurabi-seal-btn" id="hammurabi-seal-btn" title="Din stämpel">
+                            <span class="seal-face">𒈗</span>
+                            <span class="seal-caption">Din stämpel</span>
+                        </button>
+                        <button type="button" class="hammurabi-stamp-pad" id="hammurabi-stamp-pad" aria-label="Stämpelyta">
+                            <span class="stamp-pad-guide">Stämpla här</span>
+                            <span class="stamp-impression" id="hammurabi-impression">
+                                <span class="seal-face">𒈗</span>
+                                <span class="stamp-date">Intygat</span>
+                            </span>
+                        </button>
+                    </div>
+                </section>
+
+                <div class="hammurabi-actions">
+                    <button type="button" class="btn btn-secondary" id="hammurabi-cancel-btn">Avbryt</button>
+                    <button type="button" class="btn btn-primary" id="hammurabi-submit-btn" disabled>
+                        Lämna in intyg &amp; invig
+                    </button>
+                </div>
+            </div>
+        `;
+
+        modal.style.display = 'flex';
+
+        const sealBtn = document.getElementById('hammurabi-seal-btn');
+        const pad = document.getElementById('hammurabi-stamp-pad');
+        const hint = document.getElementById('hammurabi-stamp-hint');
+        const submitBtn = document.getElementById('hammurabi-submit-btn');
+        const cancelBtn = document.getElementById('hammurabi-cancel-btn');
+
+        const applyStamp = () => {
+            if (this.hammurabiStamped) return;
+            this.hammurabiStamped = true;
+            this.audio.playStamp();
+            pad.classList.add('stamped');
+            sealBtn.classList.add('used');
+            if (hint) hint.textContent = 'Stämpeln är satt — lämna in intyget för att fortsätta';
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.classList.add('ready');
+            }
+        };
+
+        if (pad) pad.addEventListener('click', applyStamp);
+        if (sealBtn) sealBtn.addEventListener('click', applyStamp);
+        if (submitBtn) {
+            submitBtn.addEventListener('click', () => this.submitHammurabiOath());
+        }
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', () => this.cancelHammurabiOath());
+        }
+    }
+
+    submitHammurabiOath() {
+        if (!this.hammurabiStamped) {
+            this.showToast('Du måste sätta din stämpel på dokumentet först.');
+            return;
+        }
+        const modal = document.getElementById('hammurabi-modal');
+        if (modal) modal.style.display = 'none';
+        this.isPaused = false;
+        this.audio.playClick();
+        this.beginCladdingPhase();
+    }
+
+    cancelHammurabiOath() {
+        const modal = document.getElementById('hammurabi-modal');
+        if (modal) modal.style.display = 'none';
+        this.hammurabiStamped = false;
+        this.isPaused = false;
+        this.gameState = 'build';
+        this.audio.playClick();
+        this.showToast('Intyget avbröts — åter i byggläge.');
+    }
+
+    beginCladdingPhase() {
         this.physics.resetToBlueprint();
         if (this.physics.terrain) this.physics.terrain.resetRuntime();
 
@@ -332,8 +468,16 @@ export class StructonGame {
         this.claddingHoldTimer = 0;
         this.claddingRooms = [];
         this.lastFacadeMountIndex = -1;
+<<<<<<< HEAD
         this.viewTilt = 0;
         this.viewTiltTarget = 0;
+=======
+        this.hammurabiStamped = false;
+        this.isPaused = false;
+
+        const hammurabiModal = document.getElementById('hammurabi-modal');
+        if (hammurabiModal) hammurabiModal.style.display = 'none';
+>>>>>>> d6117e9 (Kräv Hammurabi-intyg med stämpel innan invigningssimulation)
 
         const testHud = document.getElementById('test-hud');
         if (testHud) testHud.style.display = 'none';

@@ -112,6 +112,36 @@ export class AudioManager {
         osc.stop(this.ctx.currentTime + 0.05);
     }
 
+    // Vaxstämpel på myndighetsintyg
+    playStamp() {
+        if (!this.ctx || this.isMuted) return;
+        this.resume();
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        const noiseBuf = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.08, this.ctx.sampleRate);
+        const data = noiseBuf.getChannelData(0);
+        for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = noiseBuf;
+        const nGain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(90, now);
+        osc.frequency.exponentialRampToValueAtTime(45, now + 0.12);
+        gain.gain.setValueAtTime(0.28, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+        nGain.gain.setValueAtTime(0.18, now);
+        nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        noise.connect(nGain);
+        nGain.connect(this.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.14);
+        noise.start(now);
+        noise.stop(now + 0.08);
+    }
+
     // Placera nod
     playPlaceNode() {
         if (!this.ctx || this.isMuted) return;

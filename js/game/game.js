@@ -263,7 +263,7 @@ export class StructonGame {
                         </button>
                         <button type="button" class="hammurabi-stamp-pad" id="hammurabi-stamp-pad" aria-label="Stämpelyta">
                             <span class="stamp-pad-guide">Stämpla här</span>
-                            <span class="stamp-impression" id="hammurabi-impression" hidden>
+                            <span class="stamp-impression" id="hammurabi-impression">
                                 <span class="seal-face">𒈗</span>
                                 <span class="stamp-date">Intygat</span>
                             </span>
@@ -284,7 +284,6 @@ export class StructonGame {
 
         const sealBtn = document.getElementById('hammurabi-seal-btn');
         const pad = document.getElementById('hammurabi-stamp-pad');
-        const impression = document.getElementById('hammurabi-impression');
         const hint = document.getElementById('hammurabi-stamp-hint');
         const submitBtn = document.getElementById('hammurabi-submit-btn');
         const cancelBtn = document.getElementById('hammurabi-cancel-btn');
@@ -295,7 +294,6 @@ export class StructonGame {
             this.audio.playStamp();
             pad.classList.add('stamped');
             sealBtn.classList.add('used');
-            if (impression) impression.hidden = false;
             if (hint) hint.textContent = 'Stämpeln är satt — lämna in intyget för att fortsätta';
             if (submitBtn) {
                 submitBtn.disabled = false;

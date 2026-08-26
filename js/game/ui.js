@@ -399,27 +399,30 @@ export class UIManager {
 
             if (endNode && endNode !== this.dragStartNode) {
                 // Välj material baserat på aktivt verktyg
-                let materialToUse = this.selectedMaterial;
-                if (this.activeTool === 'strut') {
-                    materialToUse = materialToUse === 'wood' ? 'strut_wood' : 'strut_steel';
-                } else if (this.activeTool === 'foundation') {
-                    materialToUse = 'concrete_cast';
-                } else if (this.activeTool === 'pile') {
-                    materialToUse = 'pile';
+                let materialToUse = this.resolveToolMaterial();
+
+                const matDef = MATERIALS[materialToUse];
+                if (!matDef) {
+                    this.game.showToast('Välj ett material som passar verktyget.');
+                    this.isInteracting = false;
+                    this.dragStartNode = null;
+                    return;
                 }
 
-                // Kontrollera max spännvidd
-                const matDef = MATERIALS[materialToUse];
                 const span = Math.hypot(endNode.x - this.dragStartNode.x, endNode.y - this.dragStartNode.y);
 
                 if (span <= matDef.maxSpan) {
                     const member = this.game.physics.addMember(this.dragStartNode, endNode, materialToUse);
-                    if (member) {
+                    if (member?.error === 'column_slope') {
+                        this.game.showToast(
+                            `Pelare får luta max ${member.maxSlope}° från lodlinjen (nu ${member.slopeFromVertical.toFixed(0)}°).`
+                        );
+                    } else if (member) {
                         this.game.audio.playPlaceMember(materialToUse);
                         this.saveState();
+                        this._toastPileStatus(member);
                     }
                 } else {
-                    // Spännvidden för stor! Skapa mellanliggande noder eller varna
                     this.game.showToast(`För lång spännvidd! Max för ${matDef.shortName} är ${matDef.maxSpan}m.`);
                 }
             }
@@ -430,6 +433,65 @@ export class UIManager {
 
         this.isInteracting = false;
         this.dragStartNode = null;
+    }
+
+    /**
+     * Välj materialnyckel utifrån aktivt verktyg och vald palettpost.
+     */
+    resolveToolMaterial() {
+        const selected = this.selectedMaterial;
+        const selMat = MATERIALS[selected];
+
+        switch (this.activeTool) {
+            case 'strut':
+                if (selMat?.isStrut) return selected;
+                return selected === 'wood' || selected === 'column_wood' || selected === 'strut_wood'
+                    ? 'strut_wood'
+                    : 'strut_steel';
+            case 'column':
+                if (selMat?.isColumn) return selected;
+                if (selected === 'steel' || selected === 'strut_steel') return 'column_steel';
+                if (selected === 'wood' || selected === 'strut_wood') return 'column_wood';
+                return 'column_rc';
+            case 'tension':
+                return 'tension_rod';
+            case 'cable':
+                return 'pretension_cable';
+            case 'foundation':
+                return 'concrete_cast';
+            case 'pile':
+                if (selMat?.isPile) return selected;
+                return 'pile_driven';
+            case 'build':
+            default:
+                // Balkverktyg: undvik specialtyper om de råkat vara valda
+                if (selMat && (selMat.isPile || selMat.isStrut || selMat.isColumn || selMat.isTensionOnly || selMat.isFoundation)) {
+                    if (selMat.isFoundation && !selMat.isPile) return selected;
+                    return 'wood';
+                }
+                return selected || 'wood';
+        }
+    }
+
+    _toastPileStatus(member) {
+        const mat = member.material;
+        if (!mat?.isPile) return;
+        if (mat.isFrictionPile) {
+            const capKN = ((member.shaftCapacity || 0) / 1000).toFixed(0);
+            this.game.showToast(`Friktionspåle: mantellast ≈ ${capKN} kN via skjuvning i marken.`);
+            return;
+        }
+        const tipPinned = member.nodeA.isBedrockPinned || member.nodeB.isBedrockPinned;
+        if (tipPinned) {
+            const method = mat.pileMethod === 'bored' ? 'borrad ned i berg' : 'slagen till berg';
+            this.game.showToast(`Spetsbärande påle förankrad (${method}).`);
+        } else {
+            this.game.showToast(
+                mat.pileMethod === 'bored'
+                    ? 'Spetsbärande borrad påle når inte ned i berget – svag förankring.'
+                    : 'Spetsbärande slagen påle når inte bergytan – svag förankring.'
+            );
+        }
     }
 
     applyNodeGeology(node, x, y) {
@@ -1487,9 +1549,33 @@ export class UIManager {
 
             if (mat.isStrut) {
                 ctx.setLineDash([6, 3]); // Fackverkssträva med streckad linje
+            } else if (mat.isPretension) {
+                ctx.setLineDash([2, 4]); // Spännkabel
+                ctx.lineWidth = Math.max(2, lineWidth * 0.75);
+            } else if (mat.isTensionOnly) {
+                ctx.setLineDash([8, 4]); // Dragband
+                ctx.lineWidth = Math.max(2.5, lineWidth * 0.8);
+            } else if (mat.isColumn) {
+                ctx.lineWidth = Math.max(4, lineWidth * 1.15); // Tjockare pelare
+            } else if (mat.isFrictionPile) {
+                ctx.setLineDash([1, 0]);
+                ctx.lineWidth = Math.max(4, lineWidth);
+            } else if (mat.isPile) {
+                ctx.lineWidth = Math.max(4.5, lineWidth * 1.1);
             }
 
             ctx.stroke();
+
+            // Markera förspänning med små "dragpilar" mitt på kabeln
+            if (mat.isPretension && !this.isHeatmapActive) {
+                const mx = (x1 + x2) / 2;
+                const my = (y1 + y2) / 2;
+                ctx.beginPath();
+                ctx.arc(mx, my, Math.max(2, this.zoom * 0.08), 0, Math.PI * 2);
+                ctx.fillStyle = mat.accentColor || '#7DD3FC';
+                ctx.fill();
+            }
+
             ctx.restore();
         }
     }

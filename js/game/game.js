@@ -166,9 +166,14 @@ export class StructonGame {
         if (!container) return;
 
         container.innerHTML = '';
-        const allowed = this.currentLevel.allowedMaterials;
+        const allowed = this.currentLevel.allowedMaterials || [];
+        const tool = this.ui.activeTool;
+        const keys = allowed.filter((key) => this._materialMatchesTool(key, tool));
 
-        for (const key of allowed) {
+        // Fallback om filtret tömmer listan
+        const paletteKeys = keys.length ? keys : allowed.filter((k) => MATERIALS[k]);
+
+        for (const key of paletteKeys) {
             const mat = MATERIALS[key];
             if (!mat) continue;
 
@@ -193,6 +198,36 @@ export class StructonGame {
             });
 
             container.appendChild(card);
+        }
+
+        // Välj första om nuvarande material inte finns i paletten
+        if (paletteKeys.length && !paletteKeys.includes(this.ui.selectedMaterial)) {
+            this.ui.selectedMaterial = paletteKeys[0];
+            const first = container.querySelector('.mat-card');
+            if (first) first.classList.add('active');
+        }
+    }
+
+    _materialMatchesTool(key, tool) {
+        const mat = MATERIALS[key];
+        if (!mat) return false;
+        switch (tool) {
+            case 'pile':
+                return !!mat.isPile;
+            case 'column':
+                return !!mat.isColumn;
+            case 'strut':
+                return !!mat.isStrut;
+            case 'tension':
+                return !!mat.isTensionOnly && !mat.isPretension;
+            case 'cable':
+                return !!mat.isPretension;
+            case 'foundation':
+                return !!mat.isFoundation && !mat.isPile;
+            case 'build':
+                return !mat.isPile && !mat.isStrut && !mat.isColumn && !mat.isTensionOnly && !mat.isFoundation;
+            default:
+                return true;
         }
     }
 
@@ -698,7 +733,7 @@ export class StructonGame {
 
     bindDOMButtons() {
         // Verktygsväljare
-        const tools = ['build', 'strut', 'foundation', 'pile', 'delete', 'inspect'];
+        const tools = ['build', 'column', 'strut', 'tension', 'cable', 'foundation', 'pile', 'delete', 'inspect'];
         tools.forEach(tool => {
             const btn = document.getElementById(`tool-${tool}`);
             if (btn) {
@@ -708,6 +743,7 @@ export class StructonGame {
                     this.ui.activeTool = tool;
                     document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
+                    this.updateMaterialPalette();
                 });
             }
         });

@@ -122,8 +122,8 @@ test('2.5D-tilt ökar skew när viewTilt går mot 1', async () => {
     const tipped = buildingTiltParams(1);
     assert.ok(Math.abs(flat.skewX) < 1e-9);
     assert.ok(Math.abs(flat.scaleY - 1) < 1e-9);
-    assert.ok(tipped.skewX < -0.2, 'full tilt ska ha tydlig skew');
-    assert.ok(tipped.scaleY < 0.95, 'full tilt ska komprimera Y något');
+    assert.ok(tipped.skewX < -0.35, 'full tilt ska ha tydlig skew');
+    assert.ok(tipped.scaleY < 0.92, 'full tilt ska komprimera Y något');
 });
 
 test('lastfas sätter viewTiltTarget så byggnaden vrids upp', () => {

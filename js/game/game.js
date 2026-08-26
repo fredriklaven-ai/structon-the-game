@@ -268,6 +268,7 @@ export class StructonGame {
         this.gameState = 'test';
         this.testTimer = 0;
         this.viewTiltTarget = 1; // Vrid upp byggnaden till 2.5D-vy under laster
+        this.viewTilt = Math.max(this.viewTilt, 0.15); // Börja tippa direkt när lasterna kommer
         this.environment.setDisasterLevels({
             wind: scenario.wind,
             rain: scenario.rain,
@@ -287,7 +288,7 @@ export class StructonGame {
         if (this.gameState !== 'test' && this.gameState !== 'report') {
             this.viewTiltTarget = 0;
         }
-        const speed = target > this.viewTilt ? 1.8 : 3.5;
+        const speed = target > this.viewTilt ? 2.8 : 3.5;
         const delta = target - this.viewTilt;
         if (Math.abs(delta) < 0.001) {
             this.viewTilt = target;
@@ -467,7 +468,6 @@ export class StructonGame {
             this.lastFrameTime = timestamp;
 
             if (!this.isPaused) {
-                this.updateViewTilt(dt);
                 if (this.gameState === 'cladding') {
                     // Fasadmontage: stommen står stilla medan fasaderna monteras
                     this.physics.calculateStats();
@@ -489,6 +489,8 @@ export class StructonGame {
                     this.physics.updateDebris(dt);
                 }
             }
+            // Tilt animeras även vid paus så 2.5D-vyn alltid kan visas
+            this.updateViewTilt(dt);
 
             // Rendera canvas
             this.ui.render();

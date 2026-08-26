@@ -651,14 +651,15 @@ export class UIManager {
         }
 
         const tilt = this.game.viewTilt || 0;
-        const inLoadView = (this.game.gameState === 'test' || this.game.gameState === 'report') && tilt > 0.01;
+        const loadPhase = this.game.gameState === 'test' || this.game.gameState === 'report';
+        const inLoadView = loadPhase && tilt > 0.01;
 
         ctx.save();
         if (inLoadView) {
             this.applyBuildingTilt(ctx, tilt);
         }
 
-        if (inLoadView) {
+        if (loadPhase) {
             // Under laster: först transparenta fasader (med djup), sedan stomme ovanpå
             this.renderFacades(ctx);
             this.renderMembers(ctx);
@@ -714,6 +715,10 @@ export class UIManager {
         return { sx: cx * this.zoom, sy: -cy * this.zoom };
     }
 
+    /**
+     * Vrid upp byggnaden till en lätt 2.5D/isometrisk vy under lastfasen.
+     * Marken lämnas orörd (anropas innan denna transform).
+     */
     /**
      * Vrid upp byggnaden till en lätt 2.5D/isometrisk vy under lastfasen.
      * Marken lämnas orörd (anropas innan denna transform).
@@ -1146,8 +1151,9 @@ export class UIManager {
 
         const state = this.game.gameState;
         const tilt = this.game.viewTilt || 0;
-        const seeThrough = (state === 'test' || state === 'report') && tilt > 0.05;
-        const alphaScale = seeThrough ? 0.38 : 1;
+        const seeThrough = state === 'test' || state === 'report';
+        // Under lastfas: mer transparent; under montage: tät
+        const alphaScale = seeThrough ? 0.42 : 1;
 
         // Montering: paneler växer uppåt från bjälklaget
         const mountH = h * progress;
@@ -1155,15 +1161,16 @@ export class UIManager {
 
         ctx.save();
         ctx.beginPath();
-        ctx.rect(x1 - 2, clipTop - 2, w + Math.max(8, 18 * tilt) + 4, mountH + 8);
+        const depthPad = seeThrough ? Math.max(16, z * 1.1) : 0;
+        ctx.rect(x1 - 2, clipTop - depthPad * 0.5, w + depthPad + 6, mountH + depthPad);
         ctx.clip();
 
         const palette = this.facadePalette(style, alphaScale);
 
         // Sidoyta (djup) i 2.5D-vyn – ger känsla av volym
-        if (seeThrough && tilt > 0.15) {
-            const depth = Math.max(6, z * 0.55 * tilt);
-            const lift = depth * 0.32;
+        if (seeThrough && tilt > 0.08) {
+            const depth = Math.max(10, z * 0.85 * Math.max(tilt, 0.55));
+            const lift = depth * 0.38;
             ctx.beginPath();
             ctx.moveTo(x2, y2);
             ctx.lineTo(x2 + depth, y2 - lift);
@@ -1173,7 +1180,7 @@ export class UIManager {
             ctx.fillStyle = palette.side;
             ctx.fill();
             ctx.strokeStyle = palette.frame;
-            ctx.lineWidth = 1;
+            ctx.lineWidth = Math.max(1.5, z * 0.05);
             ctx.stroke();
 
             // Takyta på översta kanten
@@ -1185,6 +1192,9 @@ export class UIManager {
             ctx.closePath();
             ctx.fillStyle = palette.roof;
             ctx.fill();
+            ctx.strokeStyle = palette.frame;
+            ctx.lineWidth = 1;
+            ctx.stroke();
         }
 
         // Huvudfasadytan (genomskinlig under laster så stomspänning syns)
@@ -1645,13 +1655,13 @@ export function stressHeatColor(ratio) {
     return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
 }
 
-/** Parametrar för 2.5D-tilt (skew/scale). */
+/** Parametrar för 2.5D-tilt (skew/scale) – tydlig men läsbar tipp. */
 export function buildingTiltParams(tilt = 1) {
     const t = Math.max(0, Math.min(1, tilt));
     return {
-        skewX: -0.32 * t,
-        skewY: 0.05 * t,
-        scaleY: 1 - 0.12 * t,
-        scaleX: 1 + 0.04 * t
+        skewX: -0.55 * t,
+        skewY: 0.1 * t,
+        scaleY: 1 - 0.16 * t,
+        scaleX: 1 + 0.08 * t
     };
 }

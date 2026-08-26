@@ -4,7 +4,7 @@
  * rendering av balkar/mark/rum och modaler.
  */
 
-import { MATERIALS, SOIL_TYPES, getSoil, resolveSoilId } from '../engine/materials.js';
+import { MATERIALS, getSoil, resolveSoilId } from '../engine/materials.js';
 
 export class UIManager {
     constructor(game, canvas) {

@@ -3,7 +3,7 @@
  * Simulerar vindprofiler, stormbyar, ösregn, jordbävningar (Richter) och jordskred.
  */
 
-import { SOIL_TYPES, getSoil, isLandslideProneSoil, resolveSoilId } from './materials.js';
+import { getSoil, isLandslideProneSoil, resolveSoilId } from './materials.js';
 
 export class EnvironmentEngine {
     constructor() {

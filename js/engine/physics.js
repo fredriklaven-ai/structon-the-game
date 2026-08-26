@@ -3,7 +3,7 @@
  * Beräknar spänningar, deformationer, knäckning, markinteraktion och brott.
  */
 
-import { MATERIALS, SOIL_TYPES, getSoil } from './materials.js';
+import { MATERIALS, getSoil } from './materials.js';
 
 export class PhysicsEngine {
     constructor() {

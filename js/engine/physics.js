@@ -553,16 +553,11 @@ export class PhysicsEngine {
             if (n.y <= 0) {
                 const soil = n.soilType ? getSoil(n.soilType) : getSoil('moraine');
                 const penetration = -n.y;
-<<<<<<< HEAD
-                const kGround = 450000 * (soil ? soil.stiffness : 1.0);
+                const boost = n.frictionPileBoost || 1;
+                const kGround = 450000 * (soil ? soil.stiffness : 1.0) * boost;
                 // Extra sättning i lös/blöt lera
                 const settleDamp = 1 - Math.min(0.55, (soil?.settlementRate || 0) * 0.8);
                 const fNormal = penetration * kGround * settleDamp;
-=======
-                const boost = n.frictionPileBoost || 1;
-                const kGround = 450000 * (soil ? soil.stiffness : 1.0) * boost;
-                const fNormal = penetration * kGround;
->>>>>>> 5803683 (Lägg till pelare, dragband, spännkabel och påltyper)
                 n.fy += fNormal;
                 n.fx -= n.vx * (fNormal * 0.35 + 200);
                 n.vy *= 0.7;
@@ -600,15 +595,10 @@ export class PhysicsEngine {
         if (n.y < support) {
             const penetration = support - n.y;
             const soil = terrain.soilAt(n.x, support - 0.05);
-<<<<<<< HEAD
-            const kGround = 450000 * (soil ? soil.stiffness : 1.0);
-            const settleDamp = 1 - Math.min(0.55, (soil?.settlementRate || 0) * 0.8);
-            const fNormal = penetration * kGround * settleDamp;
-=======
             const boost = n.frictionPileBoost || 1;
             const kGround = 450000 * (soil ? soil.stiffness : 1.0) * boost;
-            const fNormal = penetration * kGround;
->>>>>>> 5803683 (Lägg till pelare, dragband, spännkabel och påltyper)
+            const settleDamp = 1 - Math.min(0.55, (soil?.settlementRate || 0) * 0.8);
+            const fNormal = penetration * kGround * settleDamp;
             n.fy += fNormal;
             n.fx -= n.vx * (fNormal * 0.35 + 200);
             n.vy *= 0.7;

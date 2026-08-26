@@ -1,6 +1,7 @@
 /**
  * STRUCTON THE GAME - UI & Canvas Renderingsmotor
- * Hanterar pekskärmskontroller, nyp-zoom, magnetisk snäppning, rendering av balkar/mark/rum och modaler.
+ * Hanterar pekskärmskontroller (tvåfingrar-scroll/pan, nyp-zoom), magnetisk snäppning,
+ * rendering av balkar/mark/rum och modaler.
  */
 
 import { MATERIALS, SOIL_TYPES } from '../engine/materials.js';
@@ -35,10 +36,12 @@ export class UIManager {
         this.hoverMember = null;
         this.inspectedMember = null;
 
-        // Multi-touch för nyp-zoom
+        // Multi-touch: två fingrar = panorera + nyp-zoom
         this.touchPoints = new Map();
         this.initialPinchDist = 0;
         this.initialZoom = this.zoom;
+        this.lastPinchMidpoint = null;
+        this.isTwoFingerGesture = false;
 
         // Undo/Redo historik
         this.history = [];
@@ -221,18 +224,21 @@ export class UIManager {
 
     handlePointerDown(e) {
         this.canvas.setPointerCapture(e.pointerId);
-        this.touchPoints.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
         const coords = this.getCanvasCoords(e);
+        this.touchPoints.set(e.pointerId, { x: coords.x, y: coords.y });
+
         const world = this.screenToWorld(coords.x, coords.y);
         this.currentPointerWorld = world;
 
-        // Om 2 fingrar används -> Panorera & Nyp-zooma
+        // Två fingrar: scrolla/panorera runt + nyp-zooma (avbryt bygge)
         if (this.touchPoints.size === 2) {
             const pts = Array.from(this.touchPoints.values());
             this.initialPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
             this.initialZoom = this.zoom;
+            this.lastPinchMidpoint = this._touchMidpoint(pts);
+            this.isTwoFingerGesture = true;
             this.isPanning = true;
+            this.isInteracting = false;
             this.dragStartNode = null;
             return;
         }
@@ -293,24 +299,19 @@ export class UIManager {
     }
 
     handlePointerMove(e) {
-        this.touchPoints.set(e.pointerId, { x: e.clientX, y: e.clientY });
         const coords = this.getCanvasCoords(e);
+        this.touchPoints.set(e.pointerId, { x: coords.x, y: coords.y });
         const world = this.screenToWorld(coords.x, coords.y);
         this.currentPointerWorld = world;
 
-        // Nyp-zoom med 2 fingrar
+        // Två fingrar: dra för att scrolla runt, nyp för zoom
         if (this.touchPoints.size === 2) {
-            const pts = Array.from(this.touchPoints.values());
-            const currentDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
-            if (this.initialPinchDist > 0) {
-                const scale = currentDist / this.initialPinchDist;
-                this.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.initialZoom * scale));
-            }
+            this.applyTwoFingerGesture(Array.from(this.touchPoints.values()));
             return;
         }
 
         // Panorering med mus/ett finger vid pan-läge
-        if (this.isPanning) {
+        if (this.isPanning && !this.isTwoFingerGesture) {
             const dx = coords.x - this.dragStartPos.x;
             const dy = coords.y - this.dragStartPos.y;
             this.panX += dx;
@@ -324,11 +325,58 @@ export class UIManager {
         this.hoverMember = this.findMemberUnder(world.x, world.y);
     }
 
+    _touchMidpoint(pts) {
+        return {
+            x: (pts[0].x + pts[1].x) / 2,
+            y: (pts[0].y + pts[1].y) / 2
+        };
+    }
+
+    /**
+     * Tvåfingergest: mittpunkten flyttar vyn (scroll/pan), avståndet styr zoom
+     * runt mittpunkten så att det man tittar på stannar under fingrarna.
+     */
+    applyTwoFingerGesture(pts) {
+        if (!pts || pts.length < 2) return;
+
+        const mid = this._touchMidpoint(pts);
+        const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+
+        // 1) Scrolla/panorera med mittpunkten
+        if (this.lastPinchMidpoint) {
+            this.panX += mid.x - this.lastPinchMidpoint.x;
+            this.panY += mid.y - this.lastPinchMidpoint.y;
+        }
+
+        // 2) Nyp-zoom runt mittpunkten
+        if (this.initialPinchDist > 0.5) {
+            const worldAtMid = this.screenToWorld(mid.x, mid.y);
+            const scale = dist / this.initialPinchDist;
+            this.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.initialZoom * scale));
+            this.panX = mid.x - worldAtMid.x * this.zoom;
+            this.panY = mid.y + worldAtMid.y * this.zoom;
+        }
+
+        this.lastPinchMidpoint = mid;
+    }
+
     handlePointerUp(e) {
         this.touchPoints.delete(e.pointerId);
 
         if (this.touchPoints.size < 2) {
             this.initialPinchDist = 0;
+            this.lastPinchMidpoint = null;
+        }
+
+        // Om en tvåfingergest just avslutades: ingen byggåtgärd på kvarvarande finger
+        if (this.isTwoFingerGesture) {
+            if (this.touchPoints.size === 0) {
+                this.isTwoFingerGesture = false;
+                this.isPanning = false;
+            }
+            this.isInteracting = false;
+            this.dragStartNode = null;
+            return;
         }
 
         if (this.isPanning) {

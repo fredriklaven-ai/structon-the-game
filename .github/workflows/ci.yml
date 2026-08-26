@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check for unresolved merge conflict markers
+        run: |
+          if grep -rInE '^(<{7}|={7}|>{7})([[:space:]]|$)' \
+              --exclude-dir=.git \
+              --include='*.js' --include='*.html' --include='*.css' .; then
+            echo "::error::Unresolved Git merge conflict markers found"
+            exit 1
+          fi
+          echo "No conflict markers found."
+
+      - name: Syntax-check all ES modules
+        run: |
+          set -e
+          for f in $(find js server.js -name '*.js'); do
+            node --check --input-type=module < "$f"
+            echo "OK  $f"
+          done
+
+      - name: Run unit tests
+        run: node --test $(find js -name '*.test.js')

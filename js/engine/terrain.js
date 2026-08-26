@@ -5,7 +5,7 @@
  * täckningen/spännvidden inte längre räcker.
  */
 
-import { SOIL_TYPES } from './materials.js';
+import { SOIL_TYPES, getSoil, resolveSoilId } from './materials.js';
 
 const ROCK_ALLOWABLE_STRESS = 3.5e6; // Pa, sprickigt urberg med säkerhetsfaktor
 const ROCK_DENSITY = 2700;           // kg/m³
@@ -13,10 +13,52 @@ const SOIL_DENSITY = 1800;           // kg/m³
 const TRIBUTARY_BREADTH = 6.0;       // m "in i skärmen" för 2D → 3D last
 const GRAVITY = 9.81;
 
+/** Standardlagerstackar – andelar från ytan ned mot berg. */
+const DEFAULT_LAYER_PLANS = {
+    gravel: [
+        { type: 'gravel', share: 0.55 },
+        { type: 'sand', share: 0.25 },
+        { type: 'moraine', share: 0.20 }
+    ],
+    sand: [
+        { type: 'sand', share: 0.45 },
+        { type: 'gravel', share: 0.15 },
+        { type: 'moraine', share: 0.40 }
+    ],
+    moraine: [
+        { type: 'gravel', share: 0.12 },
+        { type: 'sand', share: 0.18 },
+        { type: 'moraine', share: 0.70 }
+    ],
+    stiff_soil: [
+        { type: 'gravel', share: 0.12 },
+        { type: 'sand', share: 0.18 },
+        { type: 'moraine', share: 0.70 }
+    ],
+    stiff_clay: [
+        { type: 'sand', share: 0.12 },
+        { type: 'stiff_clay', share: 0.48 },
+        { type: 'moraine', share: 0.40 }
+    ],
+    soft_clay: [
+        { type: 'sand', share: 0.08 },
+        { type: 'soft_clay', share: 0.52 },
+        { type: 'stiff_clay', share: 0.22 },
+        { type: 'moraine', share: 0.18 }
+    ],
+    wet_soft_clay: [
+        { type: 'sand', share: 0.06 },
+        { type: 'wet_soft_clay', share: 0.48 },
+        { type: 'soft_clay', share: 0.24 },
+        { type: 'stiff_clay', share: 0.12 },
+        { type: 'moraine', share: 0.10 }
+    ]
+};
+
 export class TerrainEngine {
     constructor(ground = {}) {
         this.seed = ground.seed ?? 42;
-        this.soilType = ground.soilType || 'stiff_soil';
+        this.soilType = resolveSoilId(ground.soilType || 'moraine');
         this.baseSurfaceY = ground.surfaceY ?? 0;
         this.baseBedrockY = ground.bedrockY ?? -4;
         this.slopeAngle = ground.slopeAngle ?? 0;
@@ -26,10 +68,29 @@ export class TerrainEngine {
         this.cracks = ground.cracks || [];
         this.tunnels = (ground.tunnels || []).map((t, i) => ({ ...t, id: t.id || `tunnel_${i}` }));
         this.waterBodies = ground.waterBodies || [];
-        this.hasClayLayer = !!ground.hasClayLayer;
+        this.hasClayLayer = !!ground.hasClayLayer
+            || this.soilType === 'soft_clay'
+            || this.soilType === 'wet_soft_clay';
+        this.layerPlan = this._normalizeLayerPlan(ground.soilLayers, this.soilType);
+        this.clayNearWater = ground.clayNearWater || (this.hasClayLayer
+            ? { maxDist: 22, wetType: 'wet_soft_clay', softType: 'soft_clay', strength: 0.7 }
+            : null);
         this.collapsedTunnels = new Set();
         this.onTunnelCollapse = null;
         this._embedTunnelsInRock();
+    }
+
+    _normalizeLayerPlan(layers, soilType) {
+        if (Array.isArray(layers) && layers.length > 0) {
+            const cleaned = layers
+                .map(l => ({
+                    type: resolveSoilId(l.type || l.soil || soilType),
+                    share: Math.max(0.01, Number(l.share) || Number(l.fraction) || 0.1)
+                }))
+                .filter(l => l.type !== 'bedrock');
+            if (cleaned.length) return cleaned;
+        }
+        return (DEFAULT_LAYER_PLANS[soilType] || DEFAULT_LAYER_PLANS.moraine).map(l => ({ ...l }));
     }
 
     _embedTunnelsInRock() {
@@ -142,6 +203,164 @@ export class TerrainEngine {
         return Math.max(0, this.surfaceY(x) - this.bedrockY(x));
     }
 
+    /** Marklutning dy/dx (positiv = stiger åt höger). */
+    surfaceSlope(x, dx = 0.55) {
+        return (this.surfaceY(x + dx) - this.surfaceY(x - dx)) / (2 * dx);
+    }
+
+    /** Avstånd till närmaste vattenyta (klyfta/vatten). */
+    distanceToWater(x) {
+        let best = Infinity;
+        for (const w of this.waterBodies) {
+            const edge = Math.abs(x - w.x) - w.width / 2;
+            best = Math.min(best, Math.max(0, edge));
+        }
+        for (const r of this.ravines) {
+            if (!r.water) continue;
+            const edge = Math.abs(x - r.x) - r.width / 2;
+            best = Math.min(best, Math.max(0, edge));
+        }
+        return best;
+    }
+
+    /** 0 = långt från vatten, 1 = i/vid vatten. */
+    waterProximity(x, maxDist = 22) {
+        const d = this.distanceToWater(x);
+        if (!Number.isFinite(d)) return 0;
+        return Math.max(0, Math.min(1, 1 - d / Math.max(1, maxDist)));
+    }
+
+    /**
+     * Lagerandelar vid x – brusvarierade, med lerförstärkning mot vatten.
+     */
+    layerSharesAt(x) {
+        const plan = this.layerPlan.map(l => ({ type: l.type, share: l.share }));
+        const n = plan.length;
+        for (let i = 0; i < n; i++) {
+            const wobble = (this.fbm(x * 0.031 + i * 7.3 + this.seed * 0.07, 3) - 0.5) * 0.28;
+            plan[i].share = Math.max(0.04, plan[i].share * (1 + wobble));
+        }
+
+        const proxCfg = this.clayNearWater;
+        if (proxCfg) {
+            const maxDist = proxCfg.maxDist ?? 22;
+            const prox = this.waterProximity(x, maxDist);
+            const strength = (proxCfg.strength ?? 0.65) * prox;
+            if (strength > 0.02) {
+                const wetType = resolveSoilId(proxCfg.wetType || 'wet_soft_clay');
+                const softType = resolveSoilId(proxCfg.softType || 'soft_clay');
+                // Nära vatten: mer blöt/lös lera upptill, mindre morän/grus
+                let clayBoost = strength * 0.55;
+                for (const layer of plan) {
+                    if (layer.type === 'moraine' || layer.type === 'gravel') {
+                        const take = Math.min(layer.share * 0.65, clayBoost);
+                        layer.share -= take;
+                        clayBoost -= take;
+                    }
+                }
+                const clayShare = strength * 0.5 + (0.55 - clayBoost);
+                const preferWet = prox > 0.45;
+                const clayType = preferWet ? wetType : softType;
+                const existing = plan.find(l => l.type === clayType || l.type === softType || l.type === wetType);
+                if (existing) {
+                    existing.type = clayType;
+                    existing.share += clayShare;
+                } else {
+                    plan.splice(Math.min(1, plan.length), 0, { type: clayType, share: Math.max(0.12, clayShare) });
+                }
+            }
+        }
+
+        const sum = plan.reduce((s, l) => s + l.share, 0) || 1;
+        return plan.map(l => ({ type: l.type, share: l.share / sum }));
+    }
+
+    /**
+     * Stratigrafi vid x: lager från markyta ned till berg.
+     * @returns {{ type: string, topY: number, bottomY: number, thickness: number }[]}
+     */
+    soilColumnAt(x) {
+        const surf = this.surfaceY(x);
+        const rock = this.bedrockY(x);
+        const total = Math.max(0.08, surf - rock);
+        const shares = this.layerSharesAt(x);
+        const column = [];
+        let y = surf;
+        for (let i = 0; i < shares.length; i++) {
+            const isLast = i === shares.length - 1;
+            const th = isLast ? (y - rock) : total * shares[i].share;
+            const topY = y;
+            const bottomY = isLast ? rock : y - th;
+            column.push({
+                type: shares[i].type,
+                topY,
+                bottomY,
+                thickness: Math.max(0, topY - bottomY)
+            });
+            y = bottomY;
+        }
+        return column;
+    }
+
+    surfaceSoilId(x) {
+        const col = this.soilColumnAt(x);
+        return col.length ? col[0].type : this.soilType;
+    }
+
+    soilThicknessOf(type, x) {
+        const id = resolveSoilId(type);
+        return this.soilColumnAt(x)
+            .filter(l => l.type === id)
+            .reduce((s, l) => s + l.thickness, 0);
+    }
+
+    /**
+     * Lokal skredfara 0–1: jordart × brantlutning × närhet till vatten.
+     */
+    landslideHazardAt(x) {
+        const col = this.soilColumnAt(x);
+        const upper = col.slice(0, Math.min(2, col.length));
+        let soilRisk = 0;
+        let w = 0;
+        for (const layer of upper) {
+            const soil = getSoil(layer.type);
+            soilRisk += soil.landslideRisk * layer.thickness;
+            w += layer.thickness;
+        }
+        soilRisk = w > 0 ? soilRisk / w : getSoil(this.soilType).landslideRisk;
+
+        const slope = Math.abs(this.surfaceSlope(x));
+        // ~0.18 ≈ 10°, ~0.45 ≈ 24°
+        const steep = Math.max(0, Math.min(1, (slope - 0.08) / 0.38));
+        const prox = this.waterProximity(x, this.clayNearWater?.maxDist ?? 24);
+        // Brant + vatten väger tungt; lös lera utan lutning ger måttlig risk
+        return Math.max(0, Math.min(1,
+            soilRisk * (0.28 + 0.72 * steep) * (0.35 + 0.65 * Math.max(steep, prox))
+        ));
+    }
+
+    maxLandslideHazard(sampleLeft = -40, sampleRight = 40, dx = 2) {
+        let maxH = 0;
+        for (let x = sampleLeft; x <= sampleRight; x += dx) {
+            maxH = Math.max(maxH, this.landslideHazardAt(x));
+        }
+        return maxH;
+    }
+
+    soilAt(x, y) {
+        if (y < this.bedrockY(x) - 0.02) return SOIL_TYPES.bedrock;
+        const surf = this.surfaceY(x);
+        if (y > surf + 0.35) return getSoil(this.surfaceSoilId(x));
+        const column = this.soilColumnAt(x);
+        for (const layer of column) {
+            if (y <= layer.topY + 1e-4 && y >= layer.bottomY - 1e-4) {
+                return getSoil(layer.type);
+            }
+        }
+        if (y <= this.bedrockY(x)) return SOIL_TYPES.bedrock;
+        return getSoil(this.surfaceSoilId(x));
+    }
+
     waterSurfaceY(x) {
         for (const w of this.waterBodies) {
             if (x >= w.x - w.width / 2 && x <= w.x + w.width / 2) {
@@ -248,13 +467,6 @@ export class TerrainEngine {
         return this.surfaceY(x);
     }
 
-    soilAt(x, y) {
-        const cls = this.classify(x, y);
-        if (cls === 'rock') return SOIL_TYPES.bedrock;
-        if (cls === 'soil') return SOIL_TYPES[this.soilType] || SOIL_TYPES.stiff_soil;
-        return SOIL_TYPES[this.soilType] || SOIL_TYPES.stiff_soil;
-    }
-
     rockCoverAboveTunnel(tunnel) {
         const samples = 20;
         let minCover = Infinity;
@@ -298,7 +510,16 @@ export class TerrainEngine {
         const samples = 12;
         for (let i = 0; i <= samples; i++) {
             const x = tunnel.x - span / 2 + (span * i) / samples;
-            soilW += this.soilThickness(x) * (span / samples) * TRIBUTARY_BREADTH * SOIL_DENSITY * GRAVITY;
+            const column = this.soilColumnAt(x);
+            let colDensity = SOIL_DENSITY;
+            let colTh = 0;
+            let massProxy = 0;
+            for (const layer of column) {
+                massProxy += layer.thickness * (getSoil(layer.type).density || SOIL_DENSITY);
+                colTh += layer.thickness;
+            }
+            if (colTh > 0) colDensity = massProxy / colTh;
+            soilW += this.soilThickness(x) * (span / samples) * TRIBUTARY_BREADTH * colDensity * GRAVITY;
         }
         return rockW + soilW;
     }
@@ -441,11 +662,15 @@ export class TerrainEngine {
         const end = Math.max(x0, x1);
         const step = Math.max(0.15, dx);
         for (let x = start; x <= end + 1e-6; x += step) {
+            const layers = this.soilColumnAt(x);
             points.push({
                 x,
                 surfaceY: this.surfaceY(x),
                 bedrockY: this.bedrockY(x),
-                waterY: this.waterSurfaceY(x)
+                waterY: this.waterSurfaceY(x),
+                layers,
+                surfaceSoil: layers[0]?.type || this.soilType,
+                landslideHazard: this.landslideHazardAt(x)
             });
         }
         return points;
@@ -501,12 +726,13 @@ export function buildAnchorNodes(terrain, ground) {
                 y = terrain.bedrockY(x) - (n.embed ?? 0.45) - 1.2;
             }
         }
-        const soil = n.soil || (terrain.isRock(x, y) ? 'bedrock' : terrain.soilType);
+        const soil = n.soil
+            || (terrain.isRock(x, y) ? 'bedrock' : terrain.surfaceSoilId(x));
         return {
             x,
             y,
             fixed: n.fixed !== false && (isBedrock || followSurface),
-            soil,
+            soil: resolveSoilId(soil),
             isBedrock,
             isGroundAnchor: true
         };

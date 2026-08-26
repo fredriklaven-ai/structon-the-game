@@ -4,7 +4,7 @@
  * rendering av balkar/mark/rum och modaler.
  */
 
-import { MATERIALS, SOIL_TYPES } from '../engine/materials.js';
+import { MATERIALS, SOIL_TYPES, getSoil, resolveSoilId } from '../engine/materials.js';
 
 export class UIManager {
     constructor(game, canvas) {
@@ -436,14 +436,17 @@ export class UIManager {
         const terrain = this.game.physics.terrain;
         if (!terrain) {
             if (y <= 0) {
-                node.soilType = this.game.currentLevel ? this.game.currentLevel.ground.soilType : 'stiff_soil';
+                node.soilType = this.game.currentLevel
+                    ? resolveSoilId(this.game.currentLevel.ground.soilType)
+                    : 'moraine';
             }
             return;
         }
         const cls = terrain.classify(x, y);
         if (cls === 'rock') node.soilType = 'bedrock';
         else if (cls === 'soil' || y <= terrain.surfaceY(x) + 0.25) {
-            node.soilType = terrain.soilType;
+            const soil = terrain.soilAt(x, Math.min(y, terrain.surfaceY(x) - 0.05));
+            node.soilType = soil?.id || terrain.surfaceSoilId(x);
         }
     }
 
@@ -498,15 +501,29 @@ export class UIManager {
         const surf = terrain.surfaceY(x);
         const rock = terrain.bedrockY(x);
         const water = terrain.waterSurfaceY(x);
+        const localSoil = terrain.soilAt(x, Math.min(y, surf - 0.05));
+        const hazard = terrain.landslideHazardAt(x);
         const labels = {
             air: 'Luft / ovan mark',
             water: 'Vatten',
-            soil: SOIL_TYPES[terrain.soilType]?.name || 'Jord',
+            soil: localSoil?.name || getSoil(terrain.soilType).name,
             rock: 'Fast urberg',
             tunnel: 'Bergtunnel (hålrum)',
             crack: 'Bergsspricka'
         };
         let extra = '';
+        if (cls === 'soil' || (y <= surf && y >= rock)) {
+            const col = terrain.soilColumnAt(x);
+            const stack = col.map(l => `${getSoil(l.type).shortName || getSoil(l.type).name} ${l.thickness.toFixed(1)} m`).join(' · ');
+            extra += `<div class="stat-row"><span>Lager:</span> <strong>${stack}</strong></div>`;
+            extra += `<div class="stat-row"><span>Mäktighet:</span> <strong>${(surf - rock).toFixed(1)} m</strong></div>`;
+            if (localSoil?.requiresPiling) {
+                extra += `<div class="stat-row"><span>Grundläggning:</span> <strong style="color:#FBBF24">Kräver pålning till berg</strong></div>`;
+            }
+            if (hazard > 0.35) {
+                extra += `<div class="stat-row"><span>Skredrisk:</span> <strong style="color:#F87171">${Math.round(hazard * 100)}%</strong></div>`;
+            }
+        }
         const assessments = terrain.assessTunnelLoads(this.game.physics.nodes);
         for (const a of assessments) {
             if (!terrain.isOverTunnel(x, a.tunnel) && cls !== 'tunnel') continue;
@@ -797,13 +814,15 @@ export class UIManager {
             ctx.stroke();
         }
 
-        // 2. Jordlager mellan markyta och berg
-        const soilColor = ground.soilType === 'soft_clay' ? '#5A2A18' : '#3E2723';
-        const slideX = ground.hasClayLayer ? env.landslideProgress * 3.5 * z : 0;
-        const slideY = ground.hasClayLayer ? -env.landslideProgress * 1.8 * z : 0;
+        // 2. Jordlager mellan markyta och berg (varierande stratigrafi)
+        const slideActive = terrain.hasClayLayer || env.landslideProgress > 0.01;
+        const slideX = slideActive ? env.landslideProgress * 3.5 * z : 0;
+        const slideY = slideActive ? -env.landslideProgress * 1.8 * z : 0;
         ctx.save();
         ctx.translate(slideX, slideY);
-        ctx.fillStyle = soilColor;
+
+        // Basskikt (fyll hela jordkolumnen)
+        ctx.fillStyle = '#3E2723';
         ctx.beginPath();
         ctx.moveTo(profile[0].x * z, -profile[0].bedrockY * z);
         for (const p of profile) ctx.lineTo(p.x * z, -p.surfaceY * z);
@@ -813,8 +832,15 @@ export class UIManager {
         ctx.closePath();
         ctx.fill();
 
-        // Gräs / markyta längs den kuperade silhuetten
-        ctx.strokeStyle = ground.soilType === 'soft_clay' ? '#854D0E' : '#15803D';
+        const layerTypes = ['moraine', 'stiff_clay', 'soft_clay', 'wet_soft_clay', 'sand', 'gravel'];
+        for (const type of layerTypes) {
+            this._fillSoilLayerBand(ctx, profile, type, z);
+        }
+
+        // Gräs / markyta
+        const mid = profile[Math.floor(profile.length / 2)];
+        const topSoil = getSoil(mid?.surfaceSoil || ground.soilType);
+        ctx.strokeStyle = topSoil.grassTint || '#15803D';
         ctx.lineWidth = Math.max(3, z * 0.14);
         ctx.lineJoin = 'round';
         ctx.beginPath();
@@ -826,13 +852,14 @@ export class UIManager {
         }
         ctx.stroke();
 
-        // Grästuvor som följer lutningen
-        if (ground.soilType !== 'soft_clay' && z > 10) {
+        if (z > 10) {
             ctx.strokeStyle = 'rgba(22, 163, 74, 0.7)';
             ctx.lineWidth = 1.3;
             ctx.beginPath();
             for (let i = 2; i < profile.length - 2; i += 3) {
                 const p = profile[i];
+                const sid = p.surfaceSoil || '';
+                if (sid === 'soft_clay' || sid === 'wet_soft_clay') continue;
                 const dx = profile[i + 1].x - profile[i - 1].x;
                 const dy = profile[i + 1].surfaceY - profile[i - 1].surfaceY;
                 const len = Math.hypot(dx, dy) || 1;
@@ -861,14 +888,50 @@ export class UIManager {
         ctx.restore();
     }
 
+    _fillSoilLayerBand(ctx, profile, type, z) {
+        const soil = getSoil(type);
+        ctx.fillStyle = soil.fillColor || soil.color;
+        let i = 0;
+        while (i < profile.length) {
+            while (i < profile.length) {
+                const layer = (profile[i].layers || []).find(l => l.type === type && l.thickness >= 0.05);
+                if (layer) break;
+                i++;
+            }
+            if (i >= profile.length) break;
+            const start = i;
+            while (i < profile.length) {
+                const layer = (profile[i].layers || []).find(l => l.type === type && l.thickness >= 0.05);
+                if (!layer) break;
+                i++;
+            }
+            const seg = profile.slice(start, i);
+            if (seg.length < 1) continue;
+            ctx.beginPath();
+            const first = seg[0].layers.find(l => l.type === type);
+            ctx.moveTo(seg[0].x * z, -first.topY * z);
+            for (const p of seg) {
+                const layer = p.layers.find(l => l.type === type);
+                ctx.lineTo(p.x * z, -layer.topY * z);
+            }
+            for (let j = seg.length - 1; j >= 0; j--) {
+                const layer = seg[j].layers.find(l => l.type === type);
+                ctx.lineTo(seg[j].x * z, -layer.bottomY * z);
+            }
+            ctx.closePath();
+            ctx.fill();
+        }
+    }
+
     renderFlatGroundFallback(ctx, ground, z, deepY) {
         const left = -80 * z;
         const right = 80 * z;
+        const soil = getSoil(ground.soilType || 'moraine');
         ctx.fillStyle = '#1E293B';
         ctx.fillRect(left, -(ground.bedrockY || -6) * z, right - left, -deepY * z + 800);
-        ctx.fillStyle = ground.soilType === 'soft_clay' ? '#5A2A18' : '#3E2723';
+        ctx.fillStyle = soil.fillColor || '#3E2723';
         ctx.fillRect(left, 0, right - left, -(ground.bedrockY || -6) * z);
-        ctx.strokeStyle = '#15803D';
+        ctx.strokeStyle = soil.grassTint || '#15803D';
         ctx.lineWidth = 4;
         ctx.beginPath();
         ctx.moveTo(left, 0);
@@ -1020,11 +1083,27 @@ export class UIManager {
         const labelX = Math.max(view.left + 1.5, (ground.leftX ?? -10));
         const surf = terrain.surfaceY(labelX);
         const rock = terrain.bedrockY(labelX);
-        const midSoil = (surf + rock) / 2;
+        const column = terrain.soilColumnAt(labelX);
         ctx.fillStyle = '#94A3B8';
         ctx.fillText(`⛰️ URBERG (${rock.toFixed(1)} m)`, labelX * z, -rock * z + 16);
-        ctx.fillStyle = ground.soilType === 'soft_clay' ? '#FBBF24' : '#86EFAC';
-        ctx.fillText(`🌱 ${SOIL_TYPES[ground.soilType || 'stiff_soil'].name.toUpperCase()}`, labelX * z, -midSoil * z);
+        for (const layer of column) {
+            if (layer.thickness < 0.35) continue;
+            const soil = getSoil(layer.type);
+            const mid = (layer.topY + layer.bottomY) / 2;
+            const hazard = soil.landslideRisk >= 0.4;
+            ctx.fillStyle = hazard ? '#FBBF24' : '#86EFAC';
+            const pile = soil.requiresPiling ? ' · PÅLE' : '';
+            ctx.fillText(
+                `${soil.shortName || soil.name} ${layer.thickness.toFixed(1)}m${pile}`.toUpperCase(),
+                labelX * z,
+                -mid * z
+            );
+        }
+        const hazard = terrain.landslideHazardAt(labelX);
+        if (hazard > 0.4) {
+            ctx.fillStyle = '#F87171';
+            ctx.fillText(`⚠ SKREDRISK ${Math.round(hazard * 100)}%`, labelX * z, -(surf + 0.9) * z);
+        }
         ctx.restore();
     }
 
@@ -1329,8 +1408,12 @@ export class UIManager {
                 ctx.fillStyle = '#E11D48'; // Röd förankrad bergnod
                 ctx.strokeStyle = '#FFFFFF';
                 ctx.lineWidth = 2;
-            } else if (n.soilType === 'soft_clay') {
-                ctx.fillStyle = '#D97706'; // Marknod i lera
+            } else if (n.soilType === 'soft_clay' || n.soilType === 'wet_soft_clay') {
+                ctx.fillStyle = n.soilType === 'wet_soft_clay' ? '#92400E' : '#D97706';
+                ctx.strokeStyle = '#78350F';
+                ctx.lineWidth = 1.5;
+            } else if (n.soilType === 'stiff_clay' || n.soilType === 'sand') {
+                ctx.fillStyle = n.soilType === 'sand' ? '#EAB308' : '#C2410C';
                 ctx.strokeStyle = '#78350F';
                 ctx.lineWidth = 1.5;
             } else {

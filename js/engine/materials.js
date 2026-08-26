@@ -184,34 +184,141 @@ export const MATERIALS = {
 };
 
 /**
- * Marktyper för grundläggningsanalys
+ * Marktyper för grundläggningsanalys.
+ * Lager (grus, sand, morän, lös/fast lera) varierar i mäktighet och läge;
+ * blöt lös lera kräver pålning och ger hög skredrisk i branta sluttningar mot vatten.
  */
 export const SOIL_TYPES = {
     bedrock: {
         id: 'bedrock',
         name: 'Fast Urberg',
+        shortName: 'Urberg',
         color: '#334155',
-        bearingCapacity: Infinity, // Orubblig
+        fillColor: '#1B2434',
+        bearingCapacity: Infinity,
         landslideRisk: 0.0,
         settlementRate: 0.0,
-        stiffness: 1.0
+        stiffness: 1.0,
+        density: 2700,
+        requiresPiling: false,
+        grassTint: '#15803D'
     },
+    gravel: {
+        id: 'gravel',
+        name: 'Grus',
+        shortName: 'Grus',
+        color: '#A8A29E',
+        fillColor: '#78716C',
+        bearingCapacity: 500000,
+        landslideRisk: 0.08,
+        settlementRate: 0.03,
+        stiffness: 0.92,
+        density: 2000,
+        requiresPiling: false,
+        grassTint: '#4D7C0F'
+    },
+    sand: {
+        id: 'sand',
+        name: 'Sand',
+        shortName: 'Sand',
+        color: '#D6B56D',
+        fillColor: '#B45309',
+        bearingCapacity: 250000,
+        landslideRisk: 0.22,
+        settlementRate: 0.12,
+        stiffness: 0.72,
+        density: 1800,
+        requiresPiling: false,
+        grassTint: '#CA8A04'
+    },
+    moraine: {
+        id: 'moraine',
+        name: 'Morän',
+        shortName: 'Morän',
+        color: '#78350F',
+        fillColor: '#3E2723',
+        bearingCapacity: 350000,
+        landslideRisk: 0.12,
+        settlementRate: 0.05,
+        stiffness: 0.85,
+        density: 2100,
+        requiresPiling: false,
+        grassTint: '#15803D'
+    },
+    // Bakåtkompatibilitet: äldre nivåer använde stiff_soil = morän
     stiff_soil: {
         id: 'stiff_soil',
-        name: 'Morän / Fast Jord',
+        name: 'Morän',
+        shortName: 'Morän',
         color: '#78350F',
-        bearingCapacity: 350000,   // N/m²
-        landslideRisk: 0.1,
+        fillColor: '#3E2723',
+        bearingCapacity: 350000,
+        landslideRisk: 0.12,
         settlementRate: 0.05,
-        stiffness: 0.85
+        stiffness: 0.85,
+        density: 2100,
+        requiresPiling: false,
+        grassTint: '#15803D',
+        aliasOf: 'moraine'
+    },
+    stiff_clay: {
+        id: 'stiff_clay',
+        name: 'Fast lera',
+        shortName: 'Fast lera',
+        color: '#9A3412',
+        fillColor: '#7C2D12',
+        bearingCapacity: 180000,
+        landslideRisk: 0.35,
+        settlementRate: 0.18,
+        stiffness: 0.58,
+        density: 1900,
+        requiresPiling: false,
+        grassTint: '#A16207'
     },
     soft_clay: {
         id: 'soft_clay',
-        name: 'Känslig Lera',
+        name: 'Lös lera',
+        shortName: 'Lös lera',
         color: '#92400E',
-        bearingCapacity: 90000,    // Mycket mjukt, sjunker under tunga laster
-        landslideRisk: 0.75,       // Hög risk för skred vid regn!
+        fillColor: '#5A2A18',
+        bearingCapacity: 90000,
+        landslideRisk: 0.72,
         settlementRate: 0.4,
-        stiffness: 0.4
+        stiffness: 0.38,
+        density: 1700,
+        requiresPiling: true,
+        grassTint: '#854D0E'
+    },
+    wet_soft_clay: {
+        id: 'wet_soft_clay',
+        name: 'Blöt lös lera',
+        shortName: 'Blöt lera',
+        color: '#713F12',
+        fillColor: '#3F1F12',
+        bearingCapacity: 45000,
+        landslideRisk: 0.92,
+        settlementRate: 0.65,
+        stiffness: 0.22,
+        density: 1650,
+        requiresPiling: true,
+        grassTint: '#78350F'
     }
 };
+
+/** Normalisera jordart-id (stiff_soil → moraine). */
+export function resolveSoilId(id) {
+    if (!id) return 'moraine';
+    if (id === 'stiff_soil') return 'moraine';
+    return SOIL_TYPES[id] ? id : 'moraine';
+}
+
+export function getSoil(id) {
+    const key = resolveSoilId(id);
+    return SOIL_TYPES[key] || SOIL_TYPES.moraine;
+}
+
+/** Jordarter som kan glida vid skred (ej berg). */
+export function isLandslideProneSoil(id) {
+    const soil = getSoil(id);
+    return soil.id !== 'bedrock' && soil.landslideRisk >= 0.4;
+}

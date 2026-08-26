@@ -3,7 +3,7 @@
  * Simulerar vindprofiler, stormbyar, ösregn, jordbävningar (Richter) och jordskred.
  */
 
-import { SOIL_TYPES } from './materials.js';
+import { SOIL_TYPES, getSoil, isLandslideProneSoil, resolveSoilId } from './materials.js';
 
 export class EnvironmentEngine {
     constructor() {
@@ -14,6 +14,7 @@ export class EnvironmentEngine {
         this.earthquakeMagnitude = 0; // 0 - 9 på Richterskalan
         this.landslideActive = false; // Jordskred aktivt
         this.landslideProgress = 0;   // 0 -> 1.0
+        this.landslideAuto = false;   // Skred triggat av brant lerjutning + regn
 
         // Tidsvariabler och vågform
         this.time = 0;
@@ -44,6 +45,7 @@ export class EnvironmentEngine {
         this.rainIntensity = 0;
         this.earthquakeMagnitude = 0;
         this.landslideActive = false;
+        this.landslideAuto = false;
         this.landslideProgress = 0;
         this.time = 0;
         this.earthquakeTime = 0;
@@ -98,8 +100,16 @@ export class EnvironmentEngine {
             this.seismicWaveHistory.push(0);
         }
 
-        // 2. Jordskredsutveckling
-        if (this.landslideActive) {
+        // 2. Jordskredsutveckling – scenarioflagga ELLER brant lerjutning mot vatten + skyfall
+        if (this.terrain && this.rainIntensity > 0.55) {
+            const hazard = this.terrain.maxLandslideHazard(-36, 36, 3);
+            const autoTrigger = hazard > 0.42 && this.rainIntensity > 0.7;
+            this.landslideAuto = autoTrigger;
+        } else {
+            this.landslideAuto = false;
+        }
+        const slideOn = this.landslideActive || this.landslideAuto;
+        if (slideOn) {
             this.landslideProgress = Math.min(1.0, this.landslideProgress + dt * 0.12);
         } else {
             this.landslideProgress = Math.max(0, this.landslideProgress - dt * 0.2);
@@ -225,22 +235,45 @@ export class EnvironmentEngine {
             }
         }
 
-        // 4. Jordskredsmekanik (Landslide)
+        // 4. Jordskredsmekanik – lös/blöt lera i branta sluttningar mot vatten
         if (this.landslideProgress > 0) {
-            const slideDistanceX = this.landslideProgress * 3.5; // m glidning i sidled
-            const slideDistanceY = -this.landslideProgress * 1.8; // m sättning nedåt
+            const slideDistanceX = this.landslideProgress * 3.5;
+            const slideDistanceY = -this.landslideProgress * 1.8;
 
             for (const n of nodes) {
-                // Endast noder i känslig lera som INTE är pålade till berg
-                if (n.soilType === 'soft_clay' && !n.isBedrockPinned) {
-                    // Skredet drar med sig grunden om inte pålar når berggrund
-                    if (n.fixed) {
-                        n.x = n.initialX + slideDistanceX;
-                        n.y = n.initialY + slideDistanceY;
-                    } else {
-                        n.fx += 25000 * this.landslideProgress;
-                        n.fy -= 18000 * this.landslideProgress;
+                if (n.isBedrockPinned) continue;
+                const soilId = resolveSoilId(n.soilType);
+                const soil = getSoil(soilId);
+                if (!isLandslideProneSoil(soilId) && soil.landslideRisk < 0.4) continue;
+
+                let hazard = soil.landslideRisk;
+                if (this.terrain) {
+                    hazard = Math.max(hazard, this.terrain.landslideHazardAt(n.x));
+                    // Uppdatera jordart från lokal stratigrafi vid ytan
+                    const local = this.terrain.soilAt(n.x, this.terrain.surfaceY(n.x) - 0.1);
+                    if (local) n.soilType = local.id;
+                }
+                if (hazard < 0.28) continue;
+
+                const intensity = this.landslideProgress * Math.min(1.2, hazard + 0.15);
+                // Skredet drar med sig grunden om inte pålar når berggrund
+                if (n.fixed || n.isGroundAnchor) {
+                    // Riktning: nedåt sluttningen mot vatten
+                    let dir = 1;
+                    if (this.terrain) {
+                        const slope = this.terrain.surfaceSlope(n.x);
+                        dir = slope >= 0 ? 1 : -1;
+                        // Om vatten finns åt ett håll, glid dit
+                        const leftW = this.terrain.waterProximity(n.x - 4);
+                        const rightW = this.terrain.waterProximity(n.x + 4);
+                        if (rightW > leftW + 0.05) dir = 1;
+                        else if (leftW > rightW + 0.05) dir = -1;
                     }
+                    n.x = n.initialX + dir * slideDistanceX * intensity;
+                    n.y = n.initialY + slideDistanceY * intensity;
+                } else {
+                    n.fx += 25000 * intensity;
+                    n.fy -= 18000 * intensity;
                 }
             }
         }

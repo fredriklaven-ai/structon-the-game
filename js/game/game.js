@@ -105,15 +105,12 @@ export class StructonGame {
         this.claddingHoldTimer = 0;
         this.claddingRooms = [];
         this.lastFacadeMountIndex = -1;
-<<<<<<< HEAD
         this.viewTilt = 0;
         this.viewTiltTarget = 0;
-=======
         this.hammurabiStamped = false;
         this.isPaused = false;
         const hammurabiModal = document.getElementById('hammurabi-modal');
         if (hammurabiModal) hammurabiModal.style.display = 'none';
->>>>>>> d6117e9 (Kräv Hammurabi-intyg med stämpel innan invigningssimulation)
         this.physics.reset();
         this.environment.reset();
         this.audio.updateWind(0);
@@ -503,16 +500,13 @@ export class StructonGame {
         this.claddingHoldTimer = 0;
         this.claddingRooms = [];
         this.lastFacadeMountIndex = -1;
-<<<<<<< HEAD
         this.viewTilt = 0;
         this.viewTiltTarget = 0;
-=======
         this.hammurabiStamped = false;
         this.isPaused = false;
 
         const hammurabiModal = document.getElementById('hammurabi-modal');
         if (hammurabiModal) hammurabiModal.style.display = 'none';
->>>>>>> d6117e9 (Kräv Hammurabi-intyg med stämpel innan invigningssimulation)
 
         const testHud = document.getElementById('test-hud');
         if (testHud) testHud.style.display = 'none';

@@ -630,6 +630,258 @@ body, html {
 }
 
 /* =========================================================
+   HAMMURABIS BYGGINTYG
+   ========================================================= */
+.hammurabi-scroll {
+    max-width: 440px;
+    gap: 14px;
+    background:
+        radial-gradient(ellipse at 20% 0%, rgba(180, 140, 90, 0.18), transparent 55%),
+        linear-gradient(165deg, #1c2333 0%, #141a26 55%, #10151f 100%);
+    border: 1px solid rgba(212, 175, 110, 0.35);
+    box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+        0 18px 48px rgba(0, 0, 0, 0.55);
+}
+
+.hammurabi-crest {
+    align-self: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 22px;
+    color: #f0d39a;
+    background: radial-gradient(circle at 35% 30%, #3a455c, #1a2030 70%);
+    border: 1px solid rgba(212, 175, 110, 0.5);
+    letter-spacing: 0;
+}
+
+.hammurabi-header {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.hammurabi-eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(240, 211, 154, 0.75);
+    margin: 0;
+}
+
+.hammurabi-header h2 {
+    font-size: 18px;
+    font-weight: 800;
+    color: #f6e7c7;
+    margin: 0;
+    line-height: 1.25;
+}
+
+.hammurabi-project {
+    font-size: 12px;
+    color: rgba(226, 232, 240, 0.65);
+    margin: 0;
+}
+
+.hammurabi-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.hammurabi-lead,
+.hammurabi-affirm {
+    font-size: 13px;
+    line-height: 1.45;
+    color: rgba(226, 232, 240, 0.88);
+    margin: 0;
+}
+
+.hammurabi-law {
+    margin: 0;
+    padding: 12px 14px;
+    border-left: 3px solid #c45c3e;
+    background: rgba(196, 92, 62, 0.12);
+    border-radius: 0 10px 10px 0;
+}
+
+.hammurabi-law-label {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #e8a08a;
+    margin-bottom: 6px;
+}
+
+.hammurabi-law p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.4;
+    color: #f8ebe4;
+    font-weight: 600;
+}
+
+.hammurabi-stamp-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-top: 4px;
+    border-top: 1px dashed rgba(212, 175, 110, 0.28);
+}
+
+.hammurabi-stamp-hint {
+    margin: 0;
+    font-size: 12px;
+    color: rgba(240, 211, 154, 0.85);
+    text-align: center;
+}
+
+.hammurabi-stamp-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+.hammurabi-seal-btn,
+.hammurabi-stamp-pad {
+    border: none;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    background: transparent;
+}
+
+.hammurabi-seal-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 4px;
+    flex-shrink: 0;
+    transition: transform 0.15s ease, opacity 0.2s ease;
+}
+
+.hammurabi-seal-btn:hover { transform: scale(1.04); }
+.hammurabi-seal-btn.used { opacity: 0.45; pointer-events: none; }
+
+.seal-face {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 26px;
+    color: #3b120c;
+    background:
+        radial-gradient(circle at 30% 25%, #e07058, #9a2f22 58%, #5c1810 100%);
+    border: 2px solid rgba(255, 200, 160, 0.35);
+    box-shadow:
+        0 4px 0 rgba(60, 16, 10, 0.55),
+        0 8px 16px rgba(0, 0, 0, 0.35);
+}
+
+.seal-caption {
+    font-size: 10px;
+    color: rgba(226, 232, 240, 0.7);
+}
+
+.hammurabi-stamp-pad {
+    flex: 1;
+    min-height: 92px;
+    border-radius: 12px;
+    border: 2px dashed rgba(212, 175, 110, 0.45);
+    background: rgba(0, 0, 0, 0.22);
+    position: relative;
+    display: grid;
+    place-items: center;
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.hammurabi-stamp-pad:hover {
+    border-color: rgba(224, 112, 88, 0.7);
+    background: rgba(196, 92, 62, 0.08);
+}
+
+.hammurabi-stamp-pad.stamped {
+    border-style: solid;
+    border-color: rgba(196, 92, 62, 0.55);
+    background: rgba(196, 92, 62, 0.1);
+}
+
+.stamp-pad-guide {
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgba(212, 175, 110, 0.55);
+}
+
+.hammurabi-stamp-pad.stamped .stamp-pad-guide {
+    display: none;
+}
+
+.stamp-impression {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    animation: stampPress 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.stamp-impression .seal-face {
+    width: 72px;
+    height: 72px;
+    font-size: 28px;
+    transform: rotate(-8deg);
+    box-shadow:
+        0 2px 0 rgba(60, 16, 10, 0.4),
+        0 6px 14px rgba(0, 0, 0, 0.3);
+}
+
+.stamp-date {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #e8a08a;
+}
+
+@keyframes stampPress {
+    0% { opacity: 0; transform: scale(1.35) translateY(-10px); }
+    60% { opacity: 1; transform: scale(0.92) translateY(2px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.hammurabi-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.hammurabi-actions .btn {
+    flex: 1;
+}
+
+#hammurabi-submit-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+#hammurabi-submit-btn.ready {
+    box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.35);
+}
+
+@media (max-width: 480px) {
+    .hammurabi-stamp-row {
+        flex-direction: column;
+    }
+}
+
+/* =========================================================
    NIVÅVÄLJARE GRID
    ========================================================= */
 .level-grid {

@@ -33,6 +33,10 @@ export class StructonGame {
         this.claddingRooms = [];
         this.lastFacadeMountIndex = -1;
 
+        // 2.5D-vy under lastfas: byggnaden vrids upp så stommen syns genom fasaden
+        this.viewTilt = 0;
+        this.viewTiltTarget = 0;
+
         // Testscenario och tidtagning
         this.testTimer = 0;
         this.testDuration = 10.0;
@@ -100,6 +104,8 @@ export class StructonGame {
         this.claddingHoldTimer = 0;
         this.claddingRooms = [];
         this.lastFacadeMountIndex = -1;
+        this.viewTilt = 0;
+        this.viewTiltTarget = 0;
         this.physics.reset();
         this.environment.reset();
         this.audio.updateWind(0);
@@ -204,6 +210,8 @@ export class StructonGame {
         this.facadeProgress = 0;
         this.claddingHoldTimer = 0;
         this.lastFacadeMountIndex = -1;
+        this.viewTilt = 0;
+        this.viewTiltTarget = 0;
         // Tydlig montagefas: minst ~3.5 s så spelaren hinner se fasaderna innan last
         this.claddingDuration = Math.max(3.5, Math.min(6.5, 2.8 + this.claddingRooms.length * 0.45));
         this.gameState = 'cladding';
@@ -259,6 +267,7 @@ export class StructonGame {
         this.facadeProgress = 1;
         this.gameState = 'test';
         this.testTimer = 0;
+        this.viewTiltTarget = 1; // Vrid upp byggnaden till 2.5D-vy under laster
         this.environment.setDisasterLevels({
             wind: scenario.wind,
             rain: scenario.rain,
@@ -268,6 +277,23 @@ export class StructonGame {
         this.audio.updateWind(scenario.wind);
         this.audio.updateEarthquake(scenario.earthquake);
         this.showToast(`Lasterna påförs: ${scenario.name}!`);
+    }
+
+    /** Mjuka upp tilt under lastfas (0 = 2D, 1 = full 2.5D). */
+    updateViewTilt(dt) {
+        const target = (this.gameState === 'test' || this.gameState === 'report')
+            ? this.viewTiltTarget
+            : 0;
+        if (this.gameState !== 'test' && this.gameState !== 'report') {
+            this.viewTiltTarget = 0;
+        }
+        const speed = target > this.viewTilt ? 1.8 : 3.5;
+        const delta = target - this.viewTilt;
+        if (Math.abs(delta) < 0.001) {
+            this.viewTilt = target;
+            return;
+        }
+        this.viewTilt += Math.sign(delta) * Math.min(Math.abs(delta), speed * dt);
     }
 
     updateCladding(dt) {
@@ -305,6 +331,8 @@ export class StructonGame {
         this.claddingHoldTimer = 0;
         this.claddingRooms = [];
         this.lastFacadeMountIndex = -1;
+        this.viewTilt = 0;
+        this.viewTiltTarget = 0;
 
         const testHud = document.getElementById('test-hud');
         if (testHud) testHud.style.display = 'none';
@@ -439,6 +467,7 @@ export class StructonGame {
             this.lastFrameTime = timestamp;
 
             if (!this.isPaused) {
+                this.updateViewTilt(dt);
                 if (this.gameState === 'cladding') {
                     // Fasadmontage: stommen står stilla medan fasaderna monteras
                     this.physics.calculateStats();

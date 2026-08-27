@@ -63,6 +63,7 @@ export class PhysicsEngine {
             n.fy = 0;
             n.fixed = n.initialFixed;
             n.isBedrockPinned = n.initialBedrockPinned;
+            n.groundGripX = undefined;
         }
         for (const m of this.members) {
             m.isBroken = false;
@@ -347,6 +348,72 @@ export class PhysicsEngine {
         this.nodes = this.nodes.filter(n => n.fixed || n.isGroundAnchor || n.isBedrockPinned || n.connectedMembers.length > 0);
     }
 
+    /**
+     * Grundlägg bärande basnoder som vilar på fast mark innan lasterna påförs.
+     * En byggnad grundlagd på fast jord/berg ska stå stadigt (footing tar både
+     * sidolast och lyft) i stället för att glida/välta i väg. Lös/blöt lera som
+     * kräver pålning grundläggs INTE här – där måste spelaren påla till berg,
+     * så skred- och sättningsutmaningen på svåra nivåer består.
+     */
+    foundGroundContactNodes() {
+        const terrain = this.terrain;
+        for (const n of this.nodes) {
+            if (n.fixed || n.isBedrockPinned) continue;
+            if (!n.connectedMembers || n.connectedMembers.length === 0) continue;
+
+            let soil = null;
+            let founded = false;
+            let firmBearing = false;
+            if (!terrain) {
+                if (n.y <= 0.15) {
+                    soil = getSoil(n.soilType || 'moraine');
+                    founded = true;
+                    firmBearing = !soil.requiresPiling;
+                }
+            } else {
+                const surf = terrain.surfaceY(n.x);
+                const rock = terrain.bedrockY(n.x);
+                if (n.y <= surf + 0.3 && n.y >= rock - 0.6) {
+                    const probeY = Math.min(n.y, surf - 0.05);
+                    const cls = terrain.classify(n.x, probeY);
+                    if (cls === 'soil' || cls === 'rock') {
+                        soil = terrain.soilAt(n.x, probeY);
+                        founded = true;
+                        firmBearing = this._hasFirmBearing(n.x, surf, rock);
+                    }
+                }
+            }
+
+            // Fast mark bär footingen; lös/blöt lera i bärzonen gör det inte
+            // (kräver pålning till berg, så skred-/sättningsutmaningen består).
+            if (founded && soil && firmBearing) {
+                n.fixed = true;
+                n.groundFounded = true;
+                n.isGroundAnchor = true;
+                if (soil.id) n.soilType = soil.id;
+            }
+        }
+    }
+
+    /**
+     * Fast bärgrund om ingen pålningskrävande jord (lös/blöt lera) finns i
+     * footingens influenszon närmast under ytan (~2.5 m). Annars måste
+     * spelaren påla till berg.
+     */
+    _hasFirmBearing(x, surf, rock, depth = 2.5) {
+        const terrain = this.terrain;
+        if (!terrain) return true;
+        const bearingBottom = Math.max(rock, surf - depth);
+        const column = terrain.soilColumnAt(x);
+        for (const layer of column) {
+            // Endast lager som överlappar bärzonen [bearingBottom, surf]
+            if (layer.bottomY > surf) continue;
+            if (layer.topY < bearingBottom) break;
+            if (getSoil(layer.type).requiresPiling) return false;
+        }
+        return true;
+    }
+
     updateNodeMasses() {
         for (const n of this.nodes) {
             let totalM = 30; // Grundvikt (kopplingar, bultar)
@@ -559,8 +626,10 @@ export class PhysicsEngine {
                 const settleDamp = 1 - Math.min(0.55, (soil?.settlementRate || 0) * 0.8);
                 const fNormal = penetration * kGround * settleDamp;
                 n.fy += fNormal;
-                n.fx -= n.vx * (fNormal * 0.35 + 200);
+                this._applyGroundFriction(n, fNormal, soil);
                 n.vy *= 0.7;
+            } else {
+                n.groundGripX = undefined;
             }
             return;
         }
@@ -576,6 +645,7 @@ export class PhysicsEngine {
         }
 
         if (cls === 'tunnel') {
+            n.groundGripX = undefined;
             const tunnel = terrain.getTunnelAt(n.x, n.y);
             if (tunnel) {
                 const floor = terrain.tunnelFloorY(tunnel, n.x);
@@ -588,6 +658,7 @@ export class PhysicsEngine {
         }
 
         if (cls === 'crack') {
+            n.groundGripX = undefined;
             return;
         }
 
@@ -600,14 +671,47 @@ export class PhysicsEngine {
             const settleDamp = 1 - Math.min(0.55, (soil?.settlementRate || 0) * 0.8);
             const fNormal = penetration * kGround * settleDamp;
             n.fy += fNormal;
-            n.fx -= n.vx * (fNormal * 0.35 + 200);
+            this._applyGroundFriction(n, fNormal, soil);
             n.vy *= 0.7;
             n.soilType = soil ? soil.id : n.soilType;
             // Lös/blöt lera utan bergförankring: långsam vertikal sättning under last
             if (soil?.requiresPiling && !n.isBedrockPinned && !n.fixed) {
                 n.fy -= n.mass * 9.81 * soil.settlementRate * 0.15;
             }
+        } else {
+            n.groundGripX = undefined;
         }
+    }
+
+    /**
+     * Statisk mark-/grundfriktion (Coulomb) för en grundlagd nod i markkontakt.
+     * En byggnad grundlagd på fast mark ska stå emot ihållande sidolast (vind)
+     * i stället för att glida i väg – men svag blöt lera greppar mindre, så
+     * pålning/skred fortsatt utmanar på svåra nivåer. Greppet begränsas av
+     * friktionskapaciteten (µ · normalkraft); översläpps den glider noden.
+     */
+    _applyGroundFriction(n, fNormal, soil) {
+        if (!(fNormal > 0)) {
+            n.groundGripX = undefined;
+            return;
+        }
+        if (n.groundGripX === undefined || n.groundGripX === null) {
+            n.groundGripX = n.x;
+        }
+        const stiffness = soil ? soil.stiffness : 1.0;
+        // Fastare jord greppar hårdare; blöt lös lera greppar minst.
+        const grip = 0.75 + 0.85 * stiffness;          // ~0.94 (blöt lera) .. ~1.6 (morän/berg)
+        const capFriction = grip * fNormal;
+        const kLat = 450000 * stiffness;               // sidostyvhet från jord/grundinbäddning
+        const stick = -kLat * (n.x - n.groundGripX);   // statisk återföring mot greppunkten
+        const damp = -n.vx * (fNormal * 0.15 + 200);   // viskös dämpning tar bort svaj
+        let f = stick + damp;
+        if (Math.abs(f) > capFriction) {
+            // Friktionskapaciteten översläpps: begränsa kraften och låt greppunkten glida med.
+            f = Math.sign(f) * capFriction;
+            n.groundGripX = n.x + f / kLat;
+        }
+        n.fx += f;
     }
 
     evaluateTunnelRoofLoads() {

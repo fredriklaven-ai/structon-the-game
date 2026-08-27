@@ -159,10 +159,203 @@ export const MATERIALS = {
         maxSpan: 8.0
     },
 
-    // 8. Betongpåle (Foundation Pile)
+    // 8. Pelare – i huvudsak vertikallast, tål viss lutning
+    column_rc: {
+        id: 'column_rc',
+        name: 'Betongpelare',
+        shortName: 'Pelare',
+        category: 'column',
+        description: 'Bärande pelare för i huvudsak vertikallast. Klarar viss lutning men är olämplig som snedsträva.',
+        costPerMeter: 2100,
+        density: 2500,
+        youngsModulus: 35e9,
+        maxCompression: 50e6,
+        maxTension: 22e6,
+        shearStrength: 16e6,
+        thickness: 15,
+        color: '#64748B',
+        borderColor: '#334155',
+        accentColor: '#94A3B8',
+        textureType: 'reinforced_concrete',
+        soundType: 'concrete',
+        isColumn: true,
+        maxSlopeDeg: 15,
+        maxSpan: 12.0
+    },
+
+    column_steel: {
+        id: 'column_steel',
+        name: 'Stålpelare',
+        shortName: 'Stålpelare',
+        category: 'column',
+        description: 'Slank stålpelare för vertikallast. Tål något brantare lutning än betongpelare.',
+        costPerMeter: 3800,
+        density: 7850,
+        youngsModulus: 210e9,
+        maxCompression: 320e6,
+        maxTension: 320e6,
+        shearStrength: 180e6,
+        thickness: 11,
+        color: '#2563EB',
+        borderColor: '#1E3A8A',
+        accentColor: '#93C5FD',
+        textureType: 'steel_ibeam',
+        soundType: 'steel',
+        isColumn: true,
+        maxSlopeDeg: 22,
+        maxSpan: 14.0
+    },
+
+    column_wood: {
+        id: 'column_wood',
+        name: 'Träpelare',
+        shortName: 'Träpelare',
+        category: 'column',
+        description: 'Träpelare för villor och lättare stommar. Kräver mer vertikal placering.',
+        costPerMeter: 950,
+        density: 500,
+        youngsModulus: 12e9,
+        maxCompression: 22e6,
+        maxTension: 16e6,
+        shearStrength: 3.5e6,
+        thickness: 13,
+        color: '#B45309',
+        borderColor: '#78350F',
+        accentColor: '#FDE68A',
+        textureType: 'wood_grain',
+        soundType: 'wood',
+        isColumn: true,
+        maxSlopeDeg: 12,
+        maxSpan: 6.0
+    },
+
+    // 9. Dragband – enbart dragkraft
+    tension_rod: {
+        id: 'tension_rod',
+        name: 'Dragband / Dragstång',
+        shortName: 'Dragband',
+        category: 'tension',
+        description: 'Höghållfast stång som enbart kan belastas i drag. Vid tryck slaknar den utan bärförmåga.',
+        costPerMeter: 1800,
+        density: 7850,
+        youngsModulus: 210e9,
+        maxCompression: 0,
+        maxTension: 450e6,
+        shearStrength: 120e6,
+        thickness: 5,
+        color: '#14B8A6',
+        borderColor: '#0F766E',
+        accentColor: '#5EEAD4',
+        textureType: 'cable_strut',
+        soundType: 'steel',
+        isTensionOnly: true,
+        maxSpan: 28.0
+    },
+
+    // 10. Spännkabel – förspänd, drar ihop ändarna
+    pretension_cable: {
+        id: 'pretension_cable',
+        name: 'Spännkabel (förspänd)',
+        shortName: 'Spännkabel',
+        category: 'tension',
+        description: 'Kabel som förbelastas med förspänningskraft så att ändarna dras ihop. Bär enbart i drag.',
+        costPerMeter: 2600,
+        density: 7850,
+        youngsModulus: 195e9,
+        maxCompression: 0,
+        maxTension: 520e6,
+        shearStrength: 100e6,
+        thickness: 4,
+        color: '#0EA5E9',
+        borderColor: '#0369A1',
+        accentColor: '#7DD3FC',
+        textureType: 'cable_strut',
+        soundType: 'steel',
+        isTensionOnly: true,
+        isPretension: true,
+        prestressForce: 180000, // N ≈ 180 kN förspänning
+        maxSpan: 35.0
+    },
+
+    // 11. Friktionspåle – last till mark via skjuvning längs manteln
+    pile_friction: {
+        id: 'pile_friction',
+        name: 'Friktionspåle',
+        shortName: 'Friktionspåle',
+        category: 'foundation',
+        description: 'Överför lasten till marklagret via skjuvning längs pålmanteln. Behöver inte nå berg.',
+        costPerMeter: 2800,
+        density: 2500,
+        youngsModulus: 35e9,
+        maxCompression: 45e6,
+        maxTension: 15e6,
+        shearStrength: 20e6,
+        thickness: 15,
+        color: '#78716C',
+        borderColor: '#44403C',
+        accentColor: '#D6D3D1',
+        textureType: 'pile_pattern',
+        soundType: 'concrete',
+        isPile: true,
+        isFrictionPile: true,
+        shaftFrictionPerMeter: 55000, // N per meter inbäddad längd
+        maxSpan: 28.0
+    },
+
+    // 12. Spetsbärande påle – slagen till berg
+    pile_driven: {
+        id: 'pile_driven',
+        name: 'Spetsbärande påle (slagen)',
+        shortName: 'Slagen påle',
+        category: 'foundation',
+        description: 'Spetsbärande påle som slås ned till bergytan och tar last via spetsen.',
+        costPerMeter: 3200,
+        density: 2600,
+        youngsModulus: 40e9,
+        maxCompression: 60e6,
+        maxTension: 20e6,
+        shearStrength: 25e6,
+        thickness: 16,
+        color: '#475569',
+        borderColor: '#1E293B',
+        accentColor: '#94A3B8',
+        textureType: 'pile_pattern',
+        soundType: 'concrete',
+        isPile: true,
+        isEndBearing: true,
+        pileMethod: 'driven',
+        maxSpan: 30.0
+    },
+
+    // 13. Spetsbärande påle – borrad ned i berg
+    pile_bored: {
+        id: 'pile_bored',
+        name: 'Spetsbärande påle (borrad)',
+        shortName: 'Borrad påle',
+        category: 'foundation',
+        description: 'Borrad spetsbärande påle som går ned i berget och förankras under bergöverytan.',
+        costPerMeter: 4100,
+        density: 2600,
+        youngsModulus: 42e9,
+        maxCompression: 70e6,
+        maxTension: 25e6,
+        shearStrength: 28e6,
+        thickness: 17,
+        color: '#334155',
+        borderColor: '#0F172A',
+        accentColor: '#CBD5E1',
+        textureType: 'pile_pattern',
+        soundType: 'concrete',
+        isPile: true,
+        isEndBearing: true,
+        pileMethod: 'bored',
+        maxSpan: 32.0
+    },
+
+    // Bakåtkompatibilitet: äldre nivåer som listar "pile"
     pile: {
         id: 'pile',
-        name: 'Slagen Betongpåle',
+        name: 'Spetsbärande påle (slagen)',
         shortName: 'Påle',
         category: 'foundation',
         description: 'Djupgrundläggning som slås genom lös lera ner till fast berg. Förhindrar sättningar och katastrofala jordskred vid storm och regn.',
@@ -179,39 +372,148 @@ export const MATERIALS = {
         textureType: 'pile_pattern',
         soundType: 'concrete',
         isPile: true,
+        isEndBearing: true,
+        pileMethod: 'driven',
         maxSpan: 30.0
     }
 };
 
 /**
- * Marktyper för grundläggningsanalys
+ * Marktyper för grundläggningsanalys.
+ * Lager (grus, sand, morän, lös/fast lera) varierar i mäktighet och läge;
+ * blöt lös lera kräver pålning och ger hög skredrisk i branta sluttningar mot vatten.
  */
 export const SOIL_TYPES = {
     bedrock: {
         id: 'bedrock',
         name: 'Fast Urberg',
+        shortName: 'Urberg',
         color: '#334155',
-        bearingCapacity: Infinity, // Orubblig
+        fillColor: '#1B2434',
+        bearingCapacity: Infinity,
         landslideRisk: 0.0,
         settlementRate: 0.0,
-        stiffness: 1.0
+        stiffness: 1.0,
+        density: 2700,
+        requiresPiling: false,
+        grassTint: '#15803D'
     },
+    gravel: {
+        id: 'gravel',
+        name: 'Grus',
+        shortName: 'Grus',
+        color: '#A8A29E',
+        fillColor: '#78716C',
+        bearingCapacity: 500000,
+        landslideRisk: 0.08,
+        settlementRate: 0.03,
+        stiffness: 0.92,
+        density: 2000,
+        requiresPiling: false,
+        grassTint: '#4D7C0F'
+    },
+    sand: {
+        id: 'sand',
+        name: 'Sand',
+        shortName: 'Sand',
+        color: '#D6B56D',
+        fillColor: '#B45309',
+        bearingCapacity: 250000,
+        landslideRisk: 0.22,
+        settlementRate: 0.12,
+        stiffness: 0.72,
+        density: 1800,
+        requiresPiling: false,
+        grassTint: '#CA8A04'
+    },
+    moraine: {
+        id: 'moraine',
+        name: 'Morän',
+        shortName: 'Morän',
+        color: '#78350F',
+        fillColor: '#3E2723',
+        bearingCapacity: 350000,
+        landslideRisk: 0.12,
+        settlementRate: 0.05,
+        stiffness: 0.85,
+        density: 2100,
+        requiresPiling: false,
+        grassTint: '#15803D'
+    },
+    // Bakåtkompatibilitet: äldre nivåer använde stiff_soil = morän
     stiff_soil: {
         id: 'stiff_soil',
-        name: 'Morän / Fast Jord',
+        name: 'Morän',
+        shortName: 'Morän',
         color: '#78350F',
-        bearingCapacity: 350000,   // N/m²
-        landslideRisk: 0.1,
+        fillColor: '#3E2723',
+        bearingCapacity: 350000,
+        landslideRisk: 0.12,
         settlementRate: 0.05,
-        stiffness: 0.85
+        stiffness: 0.85,
+        density: 2100,
+        requiresPiling: false,
+        grassTint: '#15803D',
+        aliasOf: 'moraine'
+    },
+    stiff_clay: {
+        id: 'stiff_clay',
+        name: 'Fast lera',
+        shortName: 'Fast lera',
+        color: '#9A3412',
+        fillColor: '#7C2D12',
+        bearingCapacity: 180000,
+        landslideRisk: 0.35,
+        settlementRate: 0.18,
+        stiffness: 0.58,
+        density: 1900,
+        requiresPiling: false,
+        grassTint: '#A16207'
     },
     soft_clay: {
         id: 'soft_clay',
-        name: 'Känslig Lera',
+        name: 'Lös lera',
+        shortName: 'Lös lera',
         color: '#92400E',
-        bearingCapacity: 90000,    // Mycket mjukt, sjunker under tunga laster
-        landslideRisk: 0.75,       // Hög risk för skred vid regn!
+        fillColor: '#5A2A18',
+        bearingCapacity: 90000,
+        landslideRisk: 0.72,
         settlementRate: 0.4,
-        stiffness: 0.4
+        stiffness: 0.38,
+        density: 1700,
+        requiresPiling: true,
+        grassTint: '#854D0E'
+    },
+    wet_soft_clay: {
+        id: 'wet_soft_clay',
+        name: 'Blöt lös lera',
+        shortName: 'Blöt lera',
+        color: '#713F12',
+        fillColor: '#3F1F12',
+        bearingCapacity: 45000,
+        landslideRisk: 0.92,
+        settlementRate: 0.65,
+        stiffness: 0.22,
+        density: 1650,
+        requiresPiling: true,
+        grassTint: '#78350F'
     }
 };
+
+/** Normalisera jordart-id (stiff_soil → moraine). */
+export function resolveSoilId(id) {
+    if (!id) return 'moraine';
+    if (id === 'stiff_soil') return 'moraine';
+    return SOIL_TYPES[id] ? id : 'moraine';
+}
+
+export function getSoil(id) {
+    const key = resolveSoilId(id);
+    return SOIL_TYPES[key] || SOIL_TYPES.moraine;
+}
+
+/** Jordarter som kan glida vid skred (ej berg). */
+export function isLandslideProneSoil(id) {
+    const soil = getSoil(id);
+    return soil.id !== 'bedrock' && soil.landslideRisk >= 0.4;
+}

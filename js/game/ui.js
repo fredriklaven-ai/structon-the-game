@@ -528,14 +528,34 @@ export class UIManager {
                 node.soilType = this.game.currentLevel
                     ? resolveSoilId(this.game.currentLevel.ground.soilType)
                     : 'moraine';
+                // Fast mark utan terrängmotor: lås som grundplatta
+                node.fixed = true;
+                node.initialFixed = true;
+                node.isGroundAnchor = true;
             }
             return;
         }
         const cls = terrain.classify(x, y);
-        if (cls === 'rock') node.soilType = 'bedrock';
-        else if (cls === 'soil' || y <= terrain.surfaceY(x) + 0.25) {
-            const soil = terrain.soilAt(x, Math.min(y, terrain.surfaceY(x) - 0.05));
+        const surf = terrain.surfaceY(x);
+        if (cls === 'rock') {
+            node.soilType = 'bedrock';
+            node.fixed = true;
+            node.initialFixed = true;
+            node.isBedrockPinned = true;
+            node.initialBedrockPinned = true;
+            node.isGroundAnchor = true;
+            return;
+        }
+        if (cls === 'soil' || y <= surf + 0.35) {
+            const soil = terrain.soilAt(x, Math.min(y, surf - 0.05));
             node.soilType = soil?.id || terrain.surfaceSoilId(x);
+            node.isGroundAnchor = true;
+            // Kompetent jord (ej lös/blöt lera): automatisk ytgrund = fast upplag
+            // Lös lera kräver påle och lämnas rörlig tills den pålas till berg.
+            if (!soil?.requiresPiling && y <= surf + 0.35) {
+                node.fixed = true;
+                node.initialFixed = true;
+            }
         }
     }
 

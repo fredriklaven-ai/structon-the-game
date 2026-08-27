@@ -15,8 +15,11 @@ export class PhysicsEngine {
         // Fysikparametrar
         this.gravity = -9.81; // m/s² (positiv y är uppåt)
         this.timeScale = 1.0;
-        this.subSteps = 12;   // Sub-steps för numerisk stabilitet vid styva stål/betongelement
+        // Explicit fjäderintegration kräver dt ≲ 2/ω. Med kSim≤2.8e7 och nodmassa ~50 kg
+        // behövs ≈40+ delsteg per 50 ms-frame, annars exploderar stommen numeriskt.
+        this.subSteps = 48;
         this.structuralDamping = 0.08; // Konstruktionsdämpning (viskös dämpning)
+        this.maxSpringK = 2.8e7; // N/m – numeriskt tak för styva element
         
         // Statistik för besiktning
         this.stats = {
@@ -467,7 +470,7 @@ export class PhysicsEngine {
                 // Hookes lag & töjning
                 const kPhysical = (m.material.youngsModulus * m.area) / m.restLength;
                 // Numeriskt stabil fjäderkonstant för integration
-                const kSim = Math.min(2.8e7, kPhysical);
+                const kSim = Math.min(this.maxSpringK || 2.8e7, kPhysical);
                 let normalForce = kSim * deltaL;
 
                 // Relativ hastighet för strukturdämpning (viskös dämpning för att dämpa svängningar)
@@ -477,9 +480,9 @@ export class PhysicsEngine {
                 const dirY = dy / dist;
                 const relVelNormal = rvx * dirX + rvy * dirY;
 
-                // Fysisk kritisk dämpning c = 2 * zeta * sqrt(k * m)
-                const cDamping = 0.06 * 2 * Math.sqrt(kSim * Math.max(25, (nA.mass + nB.mass) * 0.5));
-                const dampingForce = Math.max(-10000, Math.min(10000, relVelNormal * cDamping));
+                // Starkare dämpning håller explicita steg stabila nära styvhetsgränsen
+                const cDamping = 0.12 * 2 * Math.sqrt(kSim * Math.max(25, (nA.mass + nB.mass) * 0.5));
+                const dampingForce = Math.max(-15000, Math.min(15000, relVelNormal * cDamping));
                 let totalForce = normalForce + dampingForce;
 
                 m.force = normalForce; // Kraft i Newton

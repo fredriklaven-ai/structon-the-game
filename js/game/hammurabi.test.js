@@ -31,10 +31,9 @@ test('invigning kräver stämpel innan simulering startar', () => {
     assert.equal(state.simulationStarted, true);
 });
 
-test('byggregeln nämner livsoffret vid ras', () => {
-    const law =
-        'Om huset rasar och någon omkommer, ska även du som signerar offra ditt eget liv.';
+test('byggregeln citerar Hammurabi paragraf 229', () => {
+    const law = 'Om ett hus rasar och ägaren dör, ska byggmästaren avrättas.';
     assert.match(law, /rasar/i);
-    assert.match(law, /omkommer/i);
-    assert.match(law, /offra ditt eget liv/i);
+    assert.match(law, /ägaren dör/i);
+    assert.match(law, /avrättas/i);
 });

@@ -271,11 +271,17 @@ export class StructonGame {
                         Innan invigningen får fortsätta ska byggherren intyga att konstruktionen
                         uppfyller Hammurabis byggregler.
                     </p>
+                    <figure class="hammurabi-figure">
+                        <img class="hammurabi-code-img" src="img/hammurabi-lagen.png"
+                            alt="Kilskrift ur Hammurabis lag (Codex Hammurabi)" loading="lazy" />
+                        <figcaption class="hammurabi-figcaption">
+                            228–240 §§, bestämmelser för byggmästare och skeppsbyggare;
+                        </figcaption>
+                    </figure>
                     <blockquote class="hammurabi-law">
-                        <span class="hammurabi-law-label">Byggregeln</span>
+                        <span class="hammurabi-law-label">Paragraf 229</span>
                         <p>
-                            Om huset rasar och någon omkommer, ska även du som signerar
-                            offra ditt eget liv.
+                            Om ett hus rasar och ägaren dör, ska byggmästaren avrättas.
                         </p>
                     </blockquote>
                     <p class="hammurabi-affirm">

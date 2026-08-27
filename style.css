@@ -726,6 +726,34 @@ body, html {
     font-weight: 600;
 }
 
+.hammurabi-figure {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.hammurabi-code-img {
+    display: block;
+    width: 100%;
+    height: 158px;
+    object-fit: cover;
+    object-position: center;
+    border-radius: 10px;
+    border: 1px solid rgba(212, 175, 110, 0.4);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+    filter: sepia(0.15) contrast(1.05);
+}
+
+.hammurabi-figcaption {
+    font-size: 11px;
+    line-height: 1.4;
+    letter-spacing: 0.02em;
+    color: rgba(240, 211, 154, 0.8);
+    text-align: center;
+    font-style: italic;
+}
+
 .hammurabi-stamp-section {
     display: flex;
     flex-direction: column;

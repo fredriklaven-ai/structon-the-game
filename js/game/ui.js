@@ -1871,13 +1871,17 @@ export function stressHeatColor(ratio) {
     return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
 }
 
-/** Parametrar för 2.5D-tilt (skew/scale) – tydlig men läsbar tipp. */
+/**
+ * Parametrar för 2.5D-tilt (skew/scale) – en subtil djupkänsla under lastfasen.
+ * Skjuvningen hålls liten (~8°) så att stommen står upprätt och inte ser ut att
+ * "ställa sig snett"/välta; djupet förstärks i stället av fasadernas sidopaneler.
+ */
 export function buildingTiltParams(tilt = 1) {
     const t = Math.max(0, Math.min(1, tilt));
     return {
-        skewX: -0.55 * t,
-        skewY: 0.1 * t,
-        scaleY: 1 - 0.16 * t,
-        scaleX: 1 + 0.08 * t
+        skewX: -0.14 * t,
+        skewY: 0.04 * t,
+        scaleY: 1 - 0.06 * t,
+        scaleX: 1 + 0.03 * t
     };
 }

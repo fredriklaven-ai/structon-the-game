@@ -31,6 +31,10 @@ export class UIManager {
         this.isPanning = false;
         this.dragStartNode = null;
         this.dragStartPos = { x: 0, y: 0 };
+        // Noder som skapats under pågående byggdrag – städas bort om draget avbryts
+        // (t.ex. tvåfingerscroll eller tapp utan att koppla en balk) så att inga
+        // lösa vita punkter blir kvar på ritytan.
+        this.interactionCreatedNodes = [];
         this.currentPointerWorld = { x: 0, y: 0 };
         this.hoverNode = null;
         this.hoverMember = null;
@@ -240,6 +244,8 @@ export class UIManager {
             this.isPanning = true;
             this.isInteracting = false;
             this.dragStartNode = null;
+            // Städa bort en nod som första fingret hann skapa innan scrollen började
+            this.discardOrphanCreatedNodes();
             return;
         }
 
@@ -285,6 +291,7 @@ export class UIManager {
 
         // Byggverktyg (Balk, Pelare, Sträva, Grundläggning, Påle)
         this.isInteracting = true;
+        this.interactionCreatedNodes = [];
 
         if (nearestNode) {
             this.dragStartNode = nearestNode;
@@ -294,8 +301,24 @@ export class UIManager {
             const node = this.game.physics.addNode(snapped.x, snapped.y, false);
             this.applyNodeGeology(node, snapped.x, snapped.y);
             this.dragStartNode = node;
+            this.interactionCreatedNodes.push(node);
             this.game.audio.playPlaceNode();
         }
+    }
+
+    /**
+     * Ta bort noder som skapats under ett byggdrag men aldrig fått en balk
+     * (t.ex. vid tvåfingerscroll eller tapp på tom yta). Utan detta blir lösa
+     * "vita punkter" kvar eftersom ytnoder annars räknas som markankare.
+     */
+    discardOrphanCreatedNodes() {
+        if (!this.interactionCreatedNodes || !this.interactionCreatedNodes.length) return;
+        for (const node of this.interactionCreatedNodes) {
+            if (!node.connectedMembers || node.connectedMembers.length === 0) {
+                this.game.physics.removeNode(node);
+            }
+        }
+        this.interactionCreatedNodes = [];
     }
 
     handlePointerMove(e) {
@@ -376,6 +399,7 @@ export class UIManager {
             }
             this.isInteracting = false;
             this.dragStartNode = null;
+            this.discardOrphanCreatedNodes();
             return;
         }
 
@@ -394,6 +418,7 @@ export class UIManager {
                 if (Math.hypot(snapped.x - this.dragStartNode.x, snapped.y - this.dragStartNode.y) > 0.4) {
                     endNode = this.game.physics.addNode(snapped.x, snapped.y, false);
                     this.applyNodeGeology(endNode, snapped.x, snapped.y);
+                    this.interactionCreatedNodes.push(endNode);
                 }
             }
 
@@ -431,6 +456,8 @@ export class UIManager {
             this.game.physics.cleanOrphanNodes();
         }
 
+        // Ta bort noder som skapades men aldrig kopplades till en balk
+        this.discardOrphanCreatedNodes();
         this.isInteracting = false;
         this.dragStartNode = null;
     }

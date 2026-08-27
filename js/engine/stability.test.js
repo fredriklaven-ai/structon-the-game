@@ -75,7 +75,7 @@ test('avstyvad L1-villa klarar höststorm (14 m/s) utan brott', () => {
     );
 });
 
-test('lösa fotplåtar glider under vind – fasta upplag stannar kvar', () => {
+test('Coulomb-markfriktion begränsar glidning; fasta upplag står still', () => {
     const loose = new PhysicsEngine();
     const fixed = new PhysicsEngine();
     const envLoose = new EnvironmentEngine();
@@ -96,7 +96,9 @@ test('lösa fotplåtar glider under vind – fasta upplag stannar kvar', () => {
             ...engine.nodes.filter((n) => n.y < 1).map((n) => Math.abs(n.x - n._ix))
         );
 
-    assert.ok(footDrift(loose) > 1.0, `lösa fötter borde glida, drift=${footDrift(loose)}`);
+    // Statisk markfriktion (från main) ska hålla även lösa fötter inom rimlig drift
+    assert.ok(footDrift(loose) < 1.0, `lösa fötter ska greppa marken, drift=${footDrift(loose)}`);
     assert.ok(footDrift(fixed) < 0.05, `fasta fötter ska stå still, drift=${footDrift(fixed)}`);
+    assert.equal(loose.stats.brokenMembersCount, 0);
     assert.equal(fixed.stats.brokenMembersCount, 0);
 });

@@ -432,6 +432,9 @@ export class StructonGame {
 
     beginLoadPhase() {
         const scenario = this.currentLevel.testScenario;
+        // Grundlägg bärande basnoder på fast mark innan lasterna påförs, så att
+        // en byggnad som står på fast jord/berg inte glider eller välter i väg.
+        this.physics.foundGroundContactNodes();
         this.facadeProgress = 1;
         this.gameState = 'test';
         this.testTimer = 0;

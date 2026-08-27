@@ -1477,16 +1477,18 @@ export class UIManager {
             };
         }
         if (style === 'wood') {
+            // Klassisk röd trästuga (Falu rödfärg) med vita knutar och foder.
             return {
-                wallA: rgba(180, 83, 9, 0.9),
-                wallB: rgba(146, 64, 14, 0.92),
-                glassA: rgba(186, 230, 253, 0.4),
-                glassB: rgba(125, 211, 252, 0.28),
-                glassC: rgba(14, 116, 144, 0.25),
-                mullion: rgba(120, 53, 15, 0.95),
-                frame: rgba(69, 26, 3, 0.9),
-                side: rgba(120, 53, 15, 0.5),
-                roof: rgba(146, 64, 14, 0.45)
+                wallA: rgba(158, 46, 38, 0.95),
+                wallB: rgba(122, 30, 26, 0.96),
+                glassA: rgba(191, 219, 254, 0.5),
+                glassB: rgba(147, 197, 253, 0.32),
+                glassC: rgba(59, 130, 246, 0.25),
+                mullion: rgba(245, 245, 238, 0.95),
+                frame: rgba(245, 245, 238, 0.98),
+                board: rgba(90, 20, 16, 0.5),
+                side: rgba(108, 26, 22, 0.6),
+                roof: rgba(78, 18, 15, 0.55)
             };
         }
         if (style === 'curtain') {
@@ -1536,16 +1538,25 @@ export class UIManager {
     }
 
     drawWoodCladding(ctx, x, y, w, h, palette) {
-        ctx.strokeStyle = 'rgba(69, 26, 3, 0.28)';
+        // Stående lockpanel: vertikala panelskarvar i mörkare röd ton.
+        ctx.strokeStyle = palette.board || 'rgba(90, 20, 16, 0.5)';
         ctx.lineWidth = 1;
-        const board = Math.max(5, h / 7);
+        const board = Math.max(6, w / 6);
         ctx.beginPath();
-        for (let i = 1; i < h / board; i++) {
-            const oy = y + i * board;
-            ctx.moveTo(x, oy);
-            ctx.lineTo(x + w, oy);
+        for (let bx = x + board; bx < x + w; bx += board) {
+            ctx.moveTo(bx, y);
+            ctx.lineTo(bx, y + h);
         }
         ctx.stroke();
+
+        // Vita knutar (hörnbrädor) och topplist – kännetecknet för den röda stugan.
+        const knut = Math.max(3, Math.min(w * 0.12, 12));
+        const trim = Math.max(2, Math.min(h * 0.08, 9));
+        ctx.fillStyle = palette.frame || 'rgba(245, 245, 238, 0.98)';
+        ctx.fillRect(x, y, knut, h);              // vänster knut
+        ctx.fillRect(x + w - knut, y, knut, h);   // höger knut
+        ctx.fillRect(x, y, w, trim);              // vindskiva/topplist
+        ctx.fillRect(x, y + h - trim, w, trim);   // sockelbräda
     }
 
     worldToScreenOffset(node) {

@@ -7,7 +7,7 @@ import { PhysicsEngine } from '../engine/physics.js';
 import { EnvironmentEngine } from '../engine/environment.js';
 import { AudioManager } from './audio.js';
 import { UIManager } from './ui.js';
-import { LEVELS, SANDBOX_LEVEL } from './levels.js';
+import { LEVELS, SANDBOX_LEVEL, facadeStyleForLevel } from './levels.js';
 import { MATERIALS } from '../engine/materials.js';
 import { TerrainEngine, buildAnchorNodes } from '../engine/terrain.js';
 
@@ -420,20 +420,7 @@ export class StructonGame {
     }
 
     resolveFacadeStyle() {
-        const lvl = this.currentLevel;
-        const allowed = lvl?.allowedMaterials || [];
-        if (lvl?.category === 'residential' || allowed.includes('wood')) {
-            if (allowed.includes('brick') && lvl?.category === 'commercial') return 'brick';
-            if (lvl?.category === 'residential') return 'wood';
-        }
-        if (allowed.includes('brick') && (lvl?.category === 'commercial' || lvl?.id === 'level_2')) return 'brick';
-        if (lvl?.category === 'airport') return 'glass';
-        if (lvl?.category === 'highrise' || lvl?.category === 'skyscraper' || lvl?.category === 'megastructure') {
-            return 'curtain';
-        }
-        if (allowed.includes('steel')) return 'curtain';
-        if (allowed.includes('brick')) return 'brick';
-        return 'glass';
+        return facadeStyleForLevel(this.currentLevel);
     }
 
     beginLoadPhase() {

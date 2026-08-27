@@ -387,6 +387,30 @@ export const LEVELS = [
     }
 ];
 
+/**
+ * Fasadstil per nivå – fasaden moderniseras med byggnadens höjd:
+ * låg villa i rödmålat trä (klassisk stuga med vita knutar) → tegelstad →
+ * modern glasfasad (curtain wall) för höga hus, och ljus glashall för
+ * flygplatsterminalen. Ren funktion utan DOM-beroende så den kan enhetstestas.
+ */
+export function facadeStyleForLevel(lvl) {
+    if (!lvl) return 'glass';
+    const allowed = lvl.allowedMaterials || [];
+    const height = lvl.targetHeight || 0;
+
+    if (lvl.category === 'residential') return 'wood';   // röd trästuga med vita knutar
+    if (lvl.category === 'airport') return 'glass';      // ljus glashall
+    if (lvl.category === 'highrise' || lvl.category === 'skyscraper' || lvl.category === 'megastructure') {
+        return 'curtain';                                // modern glasfasad
+    }
+    // Övriga: högre hus blir modernare (glasfasad), lägre kan vara tegel/trä.
+    if (height >= 20) return 'curtain';
+    if (height >= 9) return allowed.includes('brick') ? 'brick' : 'curtain';
+    if (allowed.includes('brick')) return 'brick';
+    if (allowed.includes('wood')) return 'wood';
+    return 'glass';
+}
+
 // SANDLÅDELÄGE (SANDBOX)
 export const SANDBOX_LEVEL = {
     id: 'sandbox',

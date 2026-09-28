@@ -10,6 +10,7 @@ import { UIManager } from './ui.js';
 import { LEVELS, SANDBOX_LEVEL, facadeStyleForLevel } from './levels.js';
 import { MATERIALS } from '../engine/materials.js';
 import { TerrainEngine, buildAnchorNodes } from '../engine/terrain.js';
+import { IntroCinematic, resetIntroSeen } from './intro.js';
 
 export class StructonGame {
     constructor() {
@@ -20,11 +21,12 @@ export class StructonGame {
         this.ui = new UIManager(this, this.canvas);
 
         // Speltillstånd
-        this.gameState = 'build'; // 'build', 'oath', 'cladding', 'test', 'simulate', 'report'
+        this.gameState = 'build'; // 'intro', 'build', 'oath', 'cladding', 'test', 'simulate', 'report'
         this.currentLevelIndex = 0;
         this.currentLevel = null;
         this.isSandbox = false;
         this.hammurabiStamped = false;
+        this.introPlaying = false;
 
         // Fasadmontage före lastpåföring
         this.facadeProgress = 0;
@@ -51,6 +53,39 @@ export class StructonGame {
         this.bindDOMButtons();
         this.startLevel(0);
         this.startLoop();
+        this.playIntroIfNeeded();
+    }
+
+    playIntroIfNeeded(force = false) {
+        if (this.introPlaying) return;
+        const intro = new IntroCinematic({
+            audio: this.audio,
+            force,
+            onComplete: () => {
+                this.introPlaying = false;
+                this.gameState = 'build';
+                this.isPaused = false;
+                this.audio.resume();
+                this.showToast('Välkommen till Structon — bygg, belasta, bestå.');
+            }
+        });
+        if (!force && !intro.shouldPlay()) return;
+        this.introPlaying = true;
+        this.gameState = 'intro';
+        this.isPaused = true;
+        const kickoff = () => {
+            this.audio.init();
+            this.audio.resume();
+            intro.start();
+        };
+        kickoff();
+    }
+
+    replayIntro() {
+        resetIntroSeen();
+        const levelModal = document.getElementById('level-modal');
+        if (levelModal) levelModal.style.display = 'none';
+        this.playIntroIfNeeded(true);
     }
 
     initCallbacks() {
@@ -789,6 +824,11 @@ export class StructonGame {
         }
 
         // Nivåmeny
+        const replayIntroBtn = document.getElementById('btn-replay-intro');
+        if (replayIntroBtn) {
+            replayIntroBtn.addEventListener('click', () => this.replayIntro());
+        }
+
         const menuBtn = document.getElementById('btn-menu');
         const levelModal = document.getElementById('level-modal');
         if (menuBtn && levelModal) {
